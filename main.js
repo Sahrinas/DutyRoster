@@ -31,6 +31,7 @@ const DEFAULT_STATE = Object.freeze({
     recurrences: [],
     notes: {},
     standby: [],
+    settings: {},
 });
 
 function cloneDefaultState() {
@@ -49,6 +50,7 @@ function normalizeData(data) {
         recurrences: Array.isArray(source.recurrences) ? source.recurrences : [],
         notes: source.notes && typeof source.notes === 'object' && !Array.isArray(source.notes) ? source.notes : {},
         standby: Array.isArray(source.standby) ? source.standby : [],
+        settings: source.settings && typeof source.settings === 'object' && !Array.isArray(source.settings) ? source.settings : {},
     };
 }
 

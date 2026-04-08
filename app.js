@@ -27,14 +27,35 @@ function hasMeaningfulData(data) {
 createApp({
     setup() {
         const dayNames = ['Mandag', 'Tirsdag', 'Onsdag', 'Tordag', 'Fredag', 'Lørdag', 'Søndag'];
-        const slotsPerDay = 2;
-        const MAX_CONSECUTIVE = 5;
         const dataReady = ref(false);
 
         const saved = loadSavedSync();
 
+        // Initialize settings first with defaults
+        const defaultSettings = { 
+            slotsPerDay: 2, 
+            maxConsecutive: 5,
+            activeDays: [0, 1, 2, 3, 4],
+            colorTheme: 'dark',
+            accentColor: 'cyan',
+            showEmployeeCount: true,
+            showNotePrompts: true
+        };
+        
+        // Merge saved settings with defaults
+        const savedSettings = saved.settings && typeof saved.settings === 'object' ? saved.settings : {};
+        const settings = ref({
+            slotsPerDay: savedSettings.slotsPerDay ?? defaultSettings.slotsPerDay,
+            maxConsecutive: savedSettings.maxConsecutive ?? defaultSettings.maxConsecutive,
+            activeDays: Array.isArray(savedSettings.activeDays) ? savedSettings.activeDays : defaultSettings.activeDays,
+            colorTheme: savedSettings.colorTheme ?? defaultSettings.colorTheme,
+            accentColor: savedSettings.accentColor ?? defaultSettings.accentColor,
+            showEmployeeCount: savedSettings.showEmployeeCount ?? defaultSettings.showEmployeeCount,
+            showNotePrompts: savedSettings.showNotePrompts ?? defaultSettings.showNotePrompts
+        });
+
         const employees = ref(saved.employees || []);
-        const activeDays = ref(saved.activeDays || [0, 1, 2, 3, 4]);
+        const activeDays = ref(Array.isArray(saved.activeDays) ? saved.activeDays : settings.value.activeDays);
         const weekOffset = ref(saved.weekOffset || 0);
         const monthOffset = ref(saved.monthOffset || 0);
         const viewMode = ref(saved.viewMode || 'week'); // 'week' | 'month'
@@ -51,12 +72,40 @@ createApp({
         const MAX_UNDO = 30;
         const toast = ref(null);
         let toastTimer = null;
+        const showSetup = ref(false);
+        const setupStep = ref(1);
+        const setupConfig = ref({ 
+            slotsPerDay: 2, 
+            maxConsecutive: 5, 
+            activeDays: [0, 1, 2, 3, 4] 
+        });
+        const showSettings = ref(false);
+
+        const slotsPerDay = computed(() => settings.value.slotsPerDay);
+        const maxConsecutive = computed(() => settings.value.maxConsecutive);
 
         function showToast(message, type = 'info') {
             if (toastTimer) clearTimeout(toastTimer);
             toast.value = { message, type };
             toastTimer = setTimeout(() => { toast.value = null; }, 2600);
         }
+
+        // Sync setupConfig with current settings when setup is opened
+        watch(() => showSetup.value, (isOpen) => {
+            if (isOpen) {
+                setupConfig.value.slotsPerDay = settings.value.slotsPerDay;
+                setupConfig.value.maxConsecutive = settings.value.maxConsecutive;
+                setupConfig.value.activeDays = [...settings.value.activeDays];
+                setupStep.value = 1;
+            }
+        });
+
+        // Sync activeDays and settings.activeDays (non-deep for performance)
+        watch(() => activeDays.value.length, () => {
+            if (JSON.stringify(activeDays.value) !== JSON.stringify(settings.value.activeDays)) {
+                settings.value.activeDays = [...activeDays.value];
+            }
+        });
 
         // ===== AUTO UPDATE =====
         const appVersion = ref(null);
@@ -114,7 +163,7 @@ createApp({
                 weekOffset: weekOffset.value, monthOffset: monthOffset.value,
                 viewMode: viewMode.value, assignments: assignments.value,
                 recurrences: recurrences.value, notes: notes.value,
-                standby: standby.value,
+                standby: standby.value, settings: settings.value,
             };
         }
 
@@ -210,6 +259,11 @@ createApp({
             });
         }
 
+        // Show setup on first run
+        if (!localStorage.getItem('setupShown') && !hasMeaningfulData(saved)) {
+            showSetup.value = true;
+        }
+
         // ===== UNDO =====
         function saveUndo() {
             undoStack.value.push(JSON.parse(JSON.stringify(assignments.value)));
@@ -220,6 +274,70 @@ createApp({
             assignments.value = undoStack.value.pop();
             showToast('Fortrudt', 'info');
         }
+
+        // ===== SETTINGS =====
+        function saveSettings() {
+            // Validate
+            if (settings.value.slotsPerDay < 1 || settings.value.slotsPerDay > 5) {
+                showToast('Vagter per dag skal være mellem 1 og 5', 'error');
+                return;
+            }
+            if (settings.value.maxConsecutive < 1 || settings.value.maxConsecutive > 10) {
+                showToast('Maks dage i træk skal være mellem 1 og 10', 'error');
+                return;
+            }
+            // Sync activeDays with settings
+            activeDays.value = [...settings.value.activeDays];
+            persist();
+            showSettings.value = false;
+            showToast('Indstillinger gemt', 'success');
+        }
+
+        // ===== SETUP WIZARD =====
+        function nextSetupStep() {
+            if (setupStep.value < 4) setupStep.value++;
+        }
+        function prevSetupStep() {
+            if (setupStep.value > 1) setupStep.value--;
+        }
+        function toggleSetupDay(dayIndex) {
+            const idx = setupConfig.value.activeDays.indexOf(dayIndex);
+            if (idx >= 0) {
+                setupConfig.value.activeDays.splice(idx, 1);
+            } else {
+                setupConfig.value.activeDays.push(dayIndex);
+                setupConfig.value.activeDays.sort((a, b) => a - b);
+            }
+        }
+        function toggleSettingsDay(dayIndex) {
+            const idx = settings.value.activeDays.indexOf(dayIndex);
+            if (idx >= 0) {
+                settings.value.activeDays.splice(idx, 1);
+            } else {
+                settings.value.activeDays.push(dayIndex);
+                settings.value.activeDays.sort((a, b) => a - b);
+            }
+            // Immediately sync to main activeDays for real-time updates
+            activeDays.value = [...settings.value.activeDays];
+        }
+        function finishSetup() {
+            // Apply setup config to settings
+            settings.value.slotsPerDay = setupConfig.value.slotsPerDay;
+            settings.value.maxConsecutive = setupConfig.value.maxConsecutive;
+            settings.value.activeDays = [...setupConfig.value.activeDays];
+            
+            // Also update the main app refs
+            activeDays.value = [...setupConfig.value.activeDays];
+            
+            // Mark setup as done
+            localStorage.setItem('setupShown', 'true');
+            showSetup.value = false;
+            setupStep.value = 1;
+            
+            persist();
+            showToast('Velkom! Din opsætning er gemt.', 'success');
+        }
+
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
@@ -498,14 +616,14 @@ createApp({
                     }
 
                     if (!employees.value.find(e => e.id === rule.employeeId)) return;
-                    if (!assignments.value[dayInfo.dateKey]) assignments.value[dayInfo.dateKey] = new Array(slotsPerDay).fill(null);
+                    if (!assignments.value[dayInfo.dateKey]) assignments.value[dayInfo.dateKey] = new Array(slotsPerDay.value).fill(null);
                     const slots = assignments.value[dayInfo.dateKey];
                     if (slots.includes(rule.employeeId)) return;
                     let targetSlot = rule.slotIndex;
                     if (isRandom) {
                         // Preferred open slot order: slot 1 first, then slot 2.
                         const preferredSlots = [0, 1];
-                        targetSlot = preferredSlots.find(i => i < slotsPerDay && slots[i] == null);
+                        targetSlot = preferredSlots.find(i => i < slotsPerDay.value && slots[i] == null);
                         if (targetSlot === undefined) return;
                     } else {
                         if (slots[rule.slotIndex] != null) return;
@@ -633,7 +751,7 @@ createApp({
         function isDayFull(dateKey) {
             const slots = assignments.value[dateKey];
             if (!slots) return false;
-            return slots.filter(id => id != null).length >= slotsPerDay;
+            return slots.filter(id => id != null).length >= slotsPerDay.value;
         }
 
         function hasAnyAssignment(dateKey) {
@@ -685,7 +803,7 @@ createApp({
             const isSameDay = fromSlot && fromSlot.date === targetDate;
             const holdingShift = event.shiftKey;
             if (isSameDay && !holdingShift) {
-                if (!assignments.value[targetDate]) assignments.value[targetDate] = new Array(slotsPerDay).fill(null);
+                if (!assignments.value[targetDate]) assignments.value[targetDate] = new Array(slotsPerDay.value).fill(null);
                 const existing = assignments.value[targetDate][targetSlot];
                 assignments.value[targetDate][targetSlot] = employeeId;
                 assignments.value[targetDate][fromSlot.index] = existing;
@@ -696,7 +814,7 @@ createApp({
             if (fromSlot && !holdingShift && assignments.value[fromSlot.date]) {
                 assignments.value[fromSlot.date][fromSlot.index] = null;
             }
-            if (!assignments.value[targetDate]) assignments.value[targetDate] = new Array(slotsPerDay).fill(null);
+            if (!assignments.value[targetDate]) assignments.value[targetDate] = new Array(slotsPerDay.value).fill(null);
             assignments.value[targetDate][targetSlot] = employeeId;
         }
 
@@ -773,7 +891,7 @@ createApp({
                     }
                 });
 
-                if (maxConsecutive >= MAX_CONSECUTIVE) {
+                if (maxConsecutive >= settings.value.maxConsecutive) {
                     warns.push(`${emp.name} har ${maxConsecutive} dage i træk`);
                 }
             });
@@ -785,7 +903,7 @@ createApp({
             saveUndo();
             visibleDays.value.forEach(d => {
                 if (assignments.value[d.dateKey]) {
-                    assignments.value[d.dateKey] = new Array(slotsPerDay).fill(null);
+                    assignments.value[d.dateKey] = new Array(slotsPerDay.value).fill(null);
                 }
             });
             showToast('Periode ryddet', 'info');
@@ -798,9 +916,9 @@ createApp({
             const dutyCounts = {};
             employees.value.forEach(e => { dutyCounts[e.id] = getMonthDutyCount(e.id); });
             visibleDays.value.forEach(d => {
-                if (!assignments.value[d.dateKey]) assignments.value[d.dateKey] = new Array(slotsPerDay).fill(null);
+                if (!assignments.value[d.dateKey]) assignments.value[d.dateKey] = new Array(slotsPerDay.value).fill(null);
                 const slots = assignments.value[d.dateKey];
-                for (let s = 0; s < slotsPerDay; s++) {
+                for (let s = 0; s < slotsPerDay.value; s++) {
                     if (slots[s] != null) continue;
                     const candidates = employees.value
                         .filter(e => !slots.includes(e.id))
@@ -881,11 +999,11 @@ createApp({
             const days = visibleDays.value;
             if (days.length === 0) return;
             let csv = 'Dag,Dato';
-            for (let s = 1; s <= slotsPerDay; s++) csv += `,Slot ${s}`;
+            for (let s = 1; s <= slotsPerDay.value; s++) csv += `,Slot ${s}`;
             csv += ',Note\n';
             days.forEach(d => {
                 let row = `"${d.name}","${d.display}"`;
-                for (let s = 0; s < slotsPerDay; s++) {
+                for (let s = 0; s < slotsPerDay.value; s++) {
                     const emp = getAssignedEmployee(d.dateKey, s);
                     row += `,"${emp ? emp.name : ''}"`;
                 }
@@ -938,11 +1056,11 @@ createApp({
 
                     // Ensure assignment array exists
                     if (!assignments.value[dateKey]) {
-                        assignments.value[dateKey] = new Array(slotsPerDay).fill(null);
+                        assignments.value[dateKey] = new Array(slotsPerDay.value).fill(null);
                     }
 
                     slotCols.forEach((col, slotIdx) => {
-                        if (slotIdx >= slotsPerDay) return;
+                        if (slotIdx >= slotsPerDay.value) return;
                         const empName = (cols[col] || '').trim();
                         if (!empName) return;
 
@@ -1045,7 +1163,7 @@ createApp({
             const marginX = 30;
             const marginY = 24;
 
-            const cardInnerH = dayHeaderH + dayPadding + (slotLabelH + slotH + slotGap) * slotsPerDay + noteH + dayPadding;
+            const cardInnerH = dayHeaderH + dayPadding + (slotLabelH + slotH + slotGap) * slotsPerDay.value + noteH + dayPadding;
             const weekLabelH = isMonth ? 22 : 0;
             const colHeaderH_est = isMonth ? 20 : 0;
             const totalW = marginX * 2 + cols * colWidth + (cols - 1) * cardGap;
@@ -1178,7 +1296,7 @@ createApp({
                 ctx.beginPath(); ctx.moveTo(x + 6, y + dayHeaderH); ctx.lineTo(x + colWidth - 6, y + dayHeaderH); ctx.stroke();
 
                 let slotY = y + dayHeaderH + dayPadding;
-                for (let s = 0; s < slotsPerDay; s++) {
+                for (let s = 0; s < slotsPerDay.value; s++) {
                     ctx.font = '600 8px Orbitron, sans-serif'; ctx.fillStyle = '#4a6a8a'; ctx.textAlign = 'left';
                     ctx.fillText('SLOT ' + (s + 1), x + 14, slotY + 10);
                     slotY += slotLabelH;
@@ -1235,7 +1353,7 @@ createApp({
         return {
             dayNames, slotsPerDay, employees, activeDays, weekOffset, monthOffset,
             viewMode, assignments, recurrences, notes, newEmployeeName, dragState,
-            slotDragOver, recurMenu, searchQuery, undoStack, toast,
+            slotDragOver, recurMenu, searchQuery, undoStack, toast, showSetup, setupStep, setupConfig, showSettings, settings, maxConsecutive,
             appVersion, updateStatus, manualUpdateCheck, installUpdate, checkForUpdates, periodLabel, visibleDays,
             weekGroups, todayKey, isCurrentPeriod, filteredEmployees, conflicts,
             standby, standbyList, standbyIds, standbyDragOver,
@@ -1247,7 +1365,8 @@ createApp({
             getMonthDutyCount, unassign, onDragStartFromPool, onDragStartFromSlot,
             onDropToSlot, onDropToPool, exportImage, exportCSV, importCSV, autoFill,
             clearPeriod, undo, getNote, setNote, getRecurrence, getRecurrenceLabel,
-            getRecurrenceShort, openRecurMenu, setRecurrence,
+            getRecurrenceShort, openRecurMenu, setRecurrence, saveSettings,
+            nextSetupStep, prevSetupStep, toggleSetupDay, toggleSettingsDay, finishSetup,
         };
     }
 }).mount('#app');
