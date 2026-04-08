@@ -186,11 +186,32 @@ let updateState = {
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
 let updateReadyToInstall = false;
+let installAttemptInProgress = false;
 
 function sendToRenderer(channel, data) {
     if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send(channel, data);
     }
+}
+
+function closeAllWindowsForUpdate() {
+    for (const win of BrowserWindow.getAllWindows()) {
+        if (win.isDestroyed()) continue;
+        try {
+            win.close();
+        }
+        catch {}
+    }
+
+    setTimeout(() => {
+        for (const win of BrowserWindow.getAllWindows()) {
+            if (win.isDestroyed()) continue;
+            try {
+                win.destroy();
+            }
+            catch {}
+        }
+    }, 750);
 }
 
 function setUpdateState(patch) {
@@ -251,6 +272,10 @@ function downloadUpdate() {
 }
 
 function setupAutoUpdater() {
+    autoUpdater.on('before-quit-for-update', () => {
+        console.log('[Updater] before-quit-for-update emitted');
+    });
+
     autoUpdater.on('checking-for-update', () => {
         setUpdateState({ status: 'checking' });
     });
@@ -343,17 +368,41 @@ ipcMain.on('install-update', (_event) => {
         return;
     }
 
+    if (installAttemptInProgress) return;
+    installAttemptInProgress = true;
+
     try {
+        autoUpdater.autoInstallOnAppQuit = true;
         setUpdateState({
             status: 'installing',
             manual: true,
             message: 'Lukker appen og starter installationen...',
         });
-        setImmediate(() => {
-            autoUpdater.quitAndInstall(false, true);
-        });
+
+        setTimeout(() => {
+            try {
+                autoUpdater.quitAndInstall(false, true);
+            }
+            catch (err) {
+                console.error('[Updater] quitAndInstall immediate error', err);
+            }
+
+            closeAllWindowsForUpdate();
+
+            setTimeout(() => {
+                try {
+                    app.quit();
+                }
+                catch (err) {
+                    console.error('[Updater] app.quit fallback error', err);
+                    installAttemptInProgress = false;
+                    setUpdateState({ status: 'error', manual: true, message: err?.message || 'Ukendt fejl' });
+                }
+            }, 400);
+        }, 100);
     }
     catch (err) {
+        installAttemptInProgress = false;
         console.error('[Updater] quitAndInstall error', err);
         setUpdateState({ status: 'error', manual: true, message: err?.message || 'Ukendt fejl' });
     }
