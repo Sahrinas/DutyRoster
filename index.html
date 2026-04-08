@@ -148,17 +148,28 @@
                             @dragend="dragState = null"
                         >
                             <div class="chip-info">
-                                <span class="chip-name">{{ emp.name }}</span>
-                                <div class="duty-counts">
-                                    <span
-                                        v-for="mc in getMonthlyStats(emp.id)"
-                                        :key="mc.key"
-                                        class="duty-count"
-                                        :title="mc.count + ' vagter i ' + mc.label"
-                                    >{{ mc.short }}: {{ mc.count }}</span>
-                                </div>
+                                <template v-if="editingEmpId === emp.id">
+                                    <input class="rename-input" v-model="editingEmpName"
+                                        @keydown.enter.stop="confirmRename"
+                                        @keydown.escape.stop="cancelRename"
+                                        @blur="confirmRename" />
+                                </template>
+                                <template v-else>
+                                    <span class="chip-name">{{ emp.name }}</span>
+                                    <div class="duty-counts">
+                                        <span
+                                            v-for="mc in getMonthlyStats(emp.id)"
+                                            :key="mc.key"
+                                            class="duty-count"
+                                            :title="mc.count + ' vagter i ' + mc.label"
+                                        >{{ mc.short }}: {{ mc.count }}</span>
+                                    </div>
+                                </template>
                             </div>
                             <div class="chip-actions">
+                                <button class="chip-action-btn rename-btn" @click.stop="startRename(emp)" title="Omdøb">
+                                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                </button>
                                 <button class="chip-action-btn standby-btn" @click.stop="moveToStandby(emp.id)" title="Sæt på standby">
                                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
                                 </button>
@@ -219,6 +230,10 @@
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 7h7a3 3 0 0 1 0 6H9M3 7l3-3M3 7l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 <span>Fortryd</span>
                             </button>
+                            <button class="toolbar-btn ghost" @click="redo" :disabled="redoStack.length === 0" title="Gentag (Ctrl+Y)">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M13 7H6a3 3 0 0 0 0 6h1M13 7l-3-3M13 7l-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>Gentag</span>
+                            </button>
                         </div>
                     </div>
 
@@ -251,6 +266,7 @@
                                         <div class="day-header-left">
                                             <span class="day-name">{{ dayInfo.name.slice(0, 3) }}</span>
                                             <span v-if="dayInfo.dateKey === todayKey" class="today-tag">I dag</span>
+                                            <span v-if="isDayFull(dayInfo.dateKey)" class="full-badge">Fuld</span>
                                         </div>
                                         <span class="day-date">{{ dayInfo.display }}</span>
                                     </div>
@@ -295,6 +311,7 @@
                                 <div class="day-header-left">
                                     <span class="day-name">{{ dayInfo.name }}</span>
                                     <span v-if="dayInfo.dateKey === todayKey" class="today-tag">I dag</span>
+                                    <span v-if="isDayFull(dayInfo.dateKey)" class="full-badge">Fuld</span>
                                 </div>
                                 <span class="day-date">{{ dayInfo.display }}</span>
                             </div>

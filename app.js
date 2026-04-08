@@ -64,11 +64,14 @@ createApp({
         const notes = ref(saved.notes || {});
         const standby = ref(saved.standby || []); // [{ empId, comment }]
         const newEmployeeName = ref('');
+        const editingEmpId = ref(null);
+        const editingEmpName = ref('');
         const dragState = ref(null);
         const slotDragOver = ref(null);
         const recurMenu = ref(null);
         const searchQuery = ref('');
         const undoStack = ref([]);
+        const redoStack = ref([]);
         const MAX_UNDO = 30;
         const toast = ref(null);
         let toastTimer = null;
@@ -100,12 +103,12 @@ createApp({
             }
         });
 
-        // Sync activeDays and settings.activeDays (non-deep for performance)
-        watch(() => activeDays.value.length, () => {
+        // Sync activeDays and settings.activeDays
+        watch(activeDays, () => {
             if (JSON.stringify(activeDays.value) !== JSON.stringify(settings.value.activeDays)) {
                 settings.value.activeDays = [...activeDays.value];
             }
-        });
+        }, { deep: true });
 
         // ===== AUTO UPDATE =====
         const appVersion = ref(null);
@@ -271,15 +274,23 @@ createApp({
             showSetup.value = true;
         }
 
-        // ===== UNDO =====
+        // ===== UNDO / REDO =====
         function saveUndo() {
             undoStack.value.push(JSON.parse(JSON.stringify(assignments.value)));
             if (undoStack.value.length > MAX_UNDO) undoStack.value.shift();
+            redoStack.value = [];
         }
         function undo() {
             if (undoStack.value.length === 0) return;
+            redoStack.value.push(JSON.parse(JSON.stringify(assignments.value)));
             assignments.value = undoStack.value.pop();
             showToast('Fortrudt', 'info');
+        }
+        function redo() {
+            if (redoStack.value.length === 0) return;
+            undoStack.value.push(JSON.parse(JSON.stringify(assignments.value)));
+            assignments.value = redoStack.value.pop();
+            showToast('Gentaget', 'info');
         }
 
         // ===== SETTINGS =====
@@ -307,23 +318,14 @@ createApp({
         function prevSetupStep() {
             if (setupStep.value > 1) setupStep.value--;
         }
-        function toggleSetupDay(dayIndex) {
-            const idx = setupConfig.value.activeDays.indexOf(dayIndex);
-            if (idx >= 0) {
-                setupConfig.value.activeDays.splice(idx, 1);
-            } else {
-                setupConfig.value.activeDays.push(dayIndex);
-                setupConfig.value.activeDays.sort((a, b) => a - b);
-            }
+        function toggleDayInArray(arr, dayIndex) {
+            const idx = arr.indexOf(dayIndex);
+            if (idx >= 0) arr.splice(idx, 1);
+            else { arr.push(dayIndex); arr.sort((a, b) => a - b); }
         }
+        function toggleSetupDay(dayIndex) { toggleDayInArray(setupConfig.value.activeDays, dayIndex); }
         function toggleSettingsDay(dayIndex) {
-            const idx = settings.value.activeDays.indexOf(dayIndex);
-            if (idx >= 0) {
-                settings.value.activeDays.splice(idx, 1);
-            } else {
-                settings.value.activeDays.push(dayIndex);
-                settings.value.activeDays.sort((a, b) => a - b);
-            }
+            toggleDayInArray(settings.value.activeDays, dayIndex);
             // Immediately sync to main activeDays for real-time updates
             activeDays.value = [...settings.value.activeDays];
         }
@@ -348,6 +350,19 @@ createApp({
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'y') { e.preventDefault(); redo(); }
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Z') { e.preventDefault(); redo(); }
+                const tag = document.activeElement?.tagName;
+                const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+                if (!isInput && !e.ctrlKey && !e.metaKey) {
+                    if (e.key === 'ArrowLeft')  { e.preventDefault(); navPrev(); }
+                    if (e.key === 'ArrowRight') { e.preventDefault(); navNext(); }
+                }
+                if (e.key === 'Escape') {
+                    if (recurMenu.value)         recurMenu.value = null;
+                    else if (showSettings.value) showSettings.value = false;
+                    else if (showSetup.value)    showSetup.value = false;
+                }
             });
             window.addEventListener('beforeunload', flushPersistSync);
             window.addEventListener('pagehide', flushPersistSync);
@@ -559,9 +574,6 @@ createApp({
                     const isRandom = rule.frequency.startsWith('random-');
                     if (!isRandom && rule.dayOfWeek !== dayIndex) return;
                     const start = parseDate(rule.startDate);
-                    // Limit recurrences to 6 months from start
-                    const maxDate = new Date(start.getFullYear(), start.getMonth() + 6, start.getDate());
-                    if (date > maxDate) return;
 
                     // For random rules, get the base frequency
                     const baseFreq = isRandom ? rule.frequency.replace('random-', '') : rule.frequency;
@@ -661,7 +673,7 @@ createApp({
         function addEmployee() {
             const name = newEmployeeName.value.trim();
             if (!name) return;
-            const id = employees.value.length > 0 ? Math.max(...employees.value.map(e => e.id)) + 1 : 0;
+            const id = employees.value.length > 0 ? employees.value.reduce((m, e) => Math.max(m, e.id), -1) + 1 : 0;
             employees.value.push({ id, name });
             newEmployeeName.value = '';
         }
@@ -676,6 +688,25 @@ createApp({
                 assignments.value[key] = assignments.value[key].map(eid => eid === id ? null : eid);
             }
             recurrences.value = recurrences.value.filter(r => r.employeeId !== id);
+        }
+
+        function startRename(emp) {
+            editingEmpId.value = emp.id;
+            editingEmpName.value = emp.name;
+            nextTick(() => { document.querySelector('.rename-input')?.focus(); });
+        }
+        function confirmRename() {
+            const name = editingEmpName.value.trim();
+            if (name && editingEmpId.value !== null) {
+                const emp = employees.value.find(e => e.id === editingEmpId.value);
+                if (emp) emp.name = name;
+            }
+            editingEmpId.value = null;
+            editingEmpName.value = '';
+        }
+        function cancelRename() {
+            editingEmpId.value = null;
+            editingEmpName.value = '';
         }
 
         // ===== STANDBY =====
@@ -767,11 +798,7 @@ createApp({
         }
 
         // ===== DAY TOGGLE =====
-        function toggleDay(index) {
-            const idx = activeDays.value.indexOf(index);
-            if (idx >= 0) activeDays.value.splice(idx, 1);
-            else { activeDays.value.push(index); activeDays.value.sort((a, b) => a - b); }
-        }
+        function toggleDay(index) { toggleDayInArray(activeDays.value, index); }
 
         // ===== ASSIGNMENT HELPERS =====
         function getAssignedEmployee(dateKey, slotIndex) {
@@ -807,7 +834,8 @@ createApp({
                 const date = parseDate(dateKey);
                 const dayOfWeek = (date.getDay() + 6) % 7;
                 recurrences.value = recurrences.value.filter(r =>
-                    !(r.employeeId === emp.id && r.dayOfWeek === dayOfWeek && r.slotIndex === slotIndex)
+                    !(r.employeeId === emp.id && r.slotIndex === slotIndex &&
+                      (r.dayOfWeek === dayOfWeek || r.frequency.startsWith('random-')))
                 );
             }
             if (assignments.value[dateKey]) assignments.value[dateKey][slotIndex] = null;
@@ -902,7 +930,7 @@ createApp({
 
             employees.value.forEach(emp => {
                 let consecutive = 0;
-                let maxConsecutive = 0;
+                let longestRun = 0;
                 let lastDate = null;
 
                 allDateKeys.forEach(dk => {
@@ -917,7 +945,7 @@ createApp({
                         } else {
                             consecutive = 1;
                         }
-                        if (consecutive > maxConsecutive) maxConsecutive = consecutive;
+                        if (consecutive > longestRun) longestRun = consecutive;
                         lastDate = cur;
                     } else {
                         consecutive = 0;
@@ -925,8 +953,8 @@ createApp({
                     }
                 });
 
-                if (maxConsecutive >= settings.value.maxConsecutive) {
-                    warns.push(`${emp.name} har ${maxConsecutive} dage i træk`);
+                if (longestRun >= settings.value.maxConsecutive) {
+                    warns.push(`${emp.name} har ${longestRun} dage i træk`);
                 }
             });
             return warns;
@@ -984,29 +1012,18 @@ createApp({
             return rule ? rule.frequency : null;
         }
 
-        function getRecurrenceLabel(freq) {
-            if (freq === 'weekly') return 'Gentages hver uge';
-            if (freq === 'biweekly') return 'Gentages hver 2. uge';
-            if (freq === 'triweekly') return 'Gentages hver 3. uge';
-            if (freq === 'monthly') return 'Gentages hver måned';
-            if (freq === 'random-weekly') return 'Tilfældig dag hver uge';
-            if (freq === 'random-biweekly') return 'Tilfældig dag hver 2. uge';
-            if (freq === 'random-triweekly') return 'Tilfældig dag hver 3. uge';
-            if (freq === 'random-monthly') return 'Tilfældig dag hver måned';
-            return '';
-        }
-
-        function getRecurrenceShort(freq) {
-            if (freq === 'weekly') return '1U';
-            if (freq === 'biweekly') return '2U';
-            if (freq === 'triweekly') return '3U';
-            if (freq === 'monthly') return '1M';
-            if (freq === 'random-weekly') return '~1U';
-            if (freq === 'random-biweekly') return '~2U';
-            if (freq === 'random-triweekly') return '~3U';
-            if (freq === 'random-monthly') return '~1M';
-            return '';
-        }
+        const RECURRENCE_META = {
+            'weekly':           { label: 'Gentages hver uge',           short: '1U'  },
+            'biweekly':         { label: 'Gentages hver 2. uge',        short: '2U'  },
+            'triweekly':        { label: 'Gentages hver 3. uge',        short: '3U'  },
+            'monthly':          { label: 'Gentages hver måned',         short: '1M'  },
+            'random-weekly':    { label: 'Tilfældig dag hver uge',      short: '~1U' },
+            'random-biweekly':  { label: 'Tilfældig dag hver 2. uge',   short: '~2U' },
+            'random-triweekly': { label: 'Tilfældig dag hver 3. uge',   short: '~3U' },
+            'random-monthly':   { label: 'Tilfældig dag hver måned',    short: '~1M' },
+        };
+        function getRecurrenceLabel(freq) { return RECURRENCE_META[freq]?.label ?? ''; }
+        function getRecurrenceShort(freq) { return RECURRENCE_META[freq]?.short ?? ''; }
 
         function openRecurMenu(dateKey, slotIndex, event) {
             const rect = event.currentTarget.getBoundingClientRect();
@@ -1104,7 +1121,7 @@ createApp({
                         // Find or create employee
                         let emp = employees.value.find(e => e.name.toLowerCase() === empName.toLowerCase());
                         if (!emp) {
-                            const id = employees.value.length > 0 ? Math.max(...employees.value.map(e => e.id)) + 1 : 0;
+                            const id = employees.value.length > 0 ? employees.value.reduce((m, e) => Math.max(m, e.id), -1) + 1 : 0;
                             emp = { id, name: empName };
                             employees.value.push(emp);
                         }
@@ -1390,18 +1407,18 @@ createApp({
         return {
             dayNames, slotsPerDay, employees, activeDays, weekOffset, monthOffset,
             viewMode, assignments, recurrences, notes, newEmployeeName, dragState,
-            slotDragOver, recurMenu, searchQuery, undoStack, toast, showSetup, setupStep, setupConfig, showSettings, settings, maxConsecutive,
+            slotDragOver, recurMenu, searchQuery, undoStack, redoStack, toast, showSetup, setupStep, setupConfig, showSettings, settings, maxConsecutive,
             appVersion, updateStatus, manualUpdateCheck, installUpdate, checkForUpdates, periodLabel, visibleDays,
             weekGroups, todayKey, isCurrentPeriod, filteredEmployees, conflicts,
             standby, standbyList, standbyIds, standbyDragOver,
             moveToStandby, activateFromStandby, updateStandbyComment,
             getStandbyEmployee, onDragStartFromStandby, onDropToStandby,
             colorClass, getDayColumn, setViewMode, navPrev, navNext, goToday,
-            addEmployee, removeEmployee, toggleDay, getAssignedEmployee,
+            addEmployee, removeEmployee, editingEmpId, editingEmpName, startRename, confirmRename, cancelRename, toggleDay, getAssignedEmployee,
             isDayFull, hasAnyAssignment, getFilledCount, getMonthlyStats,
             getMonthDutyCount, unassign, onDragStartFromPool, onDragStartFromSlot,
             onDropToSlot, onDropToPool, exportImage, exportCSV, importCSV, autoFill,
-            clearPeriod, undo, getNote, setNote, getRecurrence, getRecurrenceLabel,
+            clearPeriod, undo, redo, getNote, setNote, getRecurrence, getRecurrenceLabel,
             getRecurrenceShort, openRecurMenu, setRecurrence, saveSettings,
             nextSetupStep, prevSetupStep, toggleSetupDay, toggleSettingsDay, finishSetup,
         };

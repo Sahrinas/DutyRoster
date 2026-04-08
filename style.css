@@ -592,6 +592,19 @@ main {
 .chip-action-btn:hover { opacity: 1; background: rgba(255,255,255,0.08); }
 .chip-action-btn.remove-btn:hover { color: var(--red); }
 .chip-action-btn.standby-btn:hover { color: var(--yellow); }
+.chip-action-btn.rename-btn:hover { color: var(--accent); }
+
+.rename-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--accent);
+    border-radius: 4px;
+    color: var(--text);
+    font-size: 0.8rem;
+    padding: 1px 5px;
+    outline: none;
+    width: 100%;
+    min-width: 0;
+}
 
 /* ===== DAY TOGGLES ===== */
 .day-toggles {
@@ -856,6 +869,17 @@ main {
     padding: 1px 5px;
 }
 
+.full-badge {
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: var(--green);
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.25);
+    border-radius: 4px;
+    padding: 1px 5px;
+}
+
 .day-card-header .day-date {
     font-family: 'JetBrains Mono', monospace;
     font-size: 0.72rem;
@@ -1015,16 +1039,10 @@ main {
 .note-input::placeholder { color: var(--text-dim); font-size: 0.72rem; }
 
 /* ===== FULL DAY STATE ===== */
-.day-card-full { border-color: rgba(34, 197, 94, 0.15); }
+.day-card-full { border-color: rgba(34, 197, 94, 0.4); }
 
 .day-card-full .day-card-header {
-    background: rgba(34, 197, 94, 0.04);
-}
-
-.day-card-full .day-card-header .day-name::after {
-    content: " \2713";
-    color: var(--green);
-    font-size: 0.75rem;
+    background: rgba(34, 197, 94, 0.07);
 }
 
 /* ===== RECURRENCE MENU ===== */
