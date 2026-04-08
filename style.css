@@ -755,7 +755,17 @@ main {
     gap: 14px;
 }
 
-.roster-grid-month { gap: 8px; }
+.roster-grid-month { gap: 8px; min-width: 0; }
+
+.month-view-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.month-view-scroll .month-col-headers,
+.month-view-scroll .week-row {
+    min-width: max-content;
+}
 
 /* Month column headers */
 .month-col-headers {

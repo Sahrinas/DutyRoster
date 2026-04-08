@@ -640,9 +640,16 @@ createApp({
             });
         }
 
-        watch([weekOffset, monthOffset, viewMode, recurrences], () => {
+        // Navigation: apply recurrences without undo (just revealing already-set rules)
+        watch([weekOffset, monthOffset, viewMode], () => {
             nextTick(() => applyRecurrencesForDates(visibleDays.value));
-        }, { immediate: true, deep: true });
+        }, { immediate: true });
+
+        // Recurrence rule changes: save undo first so the resulting assignments can be reverted
+        watch(recurrences, () => {
+            saveUndo();
+            nextTick(() => applyRecurrencesForDates(visibleDays.value));
+        }, { deep: true });
 
         function colorClass(id) { return 'color-' + (id % 12); }
 
@@ -660,6 +667,9 @@ createApp({
         }
 
         function removeEmployee(id) {
+            const emp = employees.value.find(e => e.id === id);
+            if (!emp) return;
+            if (!window.confirm(`Fjern "${emp.name}"? Dette kan ikke fortrydes.`)) return;
             employees.value = employees.value.filter(e => e.id !== id);
             standby.value = standby.value.filter(s => s.empId !== id);
             for (const key in assignments.value) {
@@ -721,22 +731,39 @@ createApp({
             return [...seen.values()];
         });
 
+        // Pre-compute per-employee monthly counts as a single pass over all assignments.
+        // Shape: Map<empId, Map<"year-month", count>>
+        const monthlyStatsByEmp = computed(() => {
+            const result = new Map();
+            for (const dateKey in assignments.value) {
+                const slots = assignments.value[dateKey];
+                if (!slots) continue;
+                const d = parseDate(dateKey);
+                const mk = d.getFullYear() + '-' + d.getMonth();
+                slots.forEach(id => {
+                    if (id == null) return;
+                    if (!result.has(id)) result.set(id, new Map());
+                    const empMap = result.get(id);
+                    empMap.set(mk, (empMap.get(mk) || 0) + 1);
+                });
+            }
+            return result;
+        });
+
         function getMonthlyStats(empId) {
+            const empMap = monthlyStatsByEmp.value.get(empId) || new Map();
             return visibleMonths.value.map(({ month, year }) => {
-                let count = 0;
-                for (const dateKey in assignments.value) {
-                    const d = parseDate(dateKey);
-                    if (d.getMonth() === month && d.getFullYear() === year) {
-                        const slots = assignments.value[dateKey];
-                        if (slots) slots.forEach(id => { if (id === empId) count++; });
-                    }
-                }
-                return { key: year + '-' + month, short: shortMonthNames[month], label: longMonthNames[month] + ' ' + year, count };
+                const mk = year + '-' + month;
+                const count = empMap.get(mk) || 0;
+                return { key: mk, short: shortMonthNames[month], label: longMonthNames[month] + ' ' + year, count };
             });
         }
 
         function getMonthDutyCount(empId) {
-            return getMonthlyStats(empId).reduce((sum, s) => sum + s.count, 0);
+            const empMap = monthlyStatsByEmp.value.get(empId) || new Map();
+            let total = 0;
+            empMap.forEach(v => { total += v; });
+            return total;
         }
 
         // ===== DAY TOGGLE =====
@@ -907,6 +934,8 @@ createApp({
 
         // ===== CLEAR PERIOD =====
         function clearPeriod() {
+            const label = viewMode.value === 'week' ? 'ugen' : 'måneden';
+            if (!window.confirm(`Ryd alle tildelinger for ${label}?`)) return;
             saveUndo();
             visibleDays.value.forEach(d => {
                 if (assignments.value[d.dateKey]) {
@@ -918,16 +947,17 @@ createApp({
 
         // ===== AUTO-FILL =====
         function autoFill() {
-            if (employees.value.length === 0) { showToast('Tilføj medics først', 'error'); return; }
+            const active = activeEmployees.value;
+            if (active.length === 0) { showToast('Tilføj medics først', 'error'); return; }
             saveUndo();
             const dutyCounts = {};
-            employees.value.forEach(e => { dutyCounts[e.id] = getMonthDutyCount(e.id); });
+            active.forEach(e => { dutyCounts[e.id] = getMonthDutyCount(e.id); });
             visibleDays.value.forEach(d => {
                 if (!assignments.value[d.dateKey]) assignments.value[d.dateKey] = new Array(slotsPerDay.value).fill(null);
                 const slots = assignments.value[d.dateKey];
                 for (let s = 0; s < slotsPerDay.value; s++) {
                     if (slots[s] != null) continue;
-                    const candidates = employees.value
+                    const candidates = active
                         .filter(e => !slots.includes(e.id))
                         .sort((a, b) => (dutyCounts[a.id] || 0) - (dutyCounts[b.id] || 0));
                     if (candidates.length > 0) {
@@ -1009,7 +1039,7 @@ createApp({
             for (let s = 1; s <= slotsPerDay.value; s++) csv += `,Slot ${s}`;
             csv += ',Note\n';
             days.forEach(d => {
-                let row = `"${d.name}","${d.display}"`;
+                let row = `"${d.name}","${d.dateKey}"`;
                 for (let s = 0; s < slotsPerDay.value; s++) {
                     const emp = getAssignedEmployee(d.dateKey, s);
                     row += `,"${emp ? emp.name : ''}"`;
