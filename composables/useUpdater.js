@@ -60,7 +60,7 @@ export function useUpdater({ showToast, flushPersistSync }) {
             if (data.status === 'ready' && data.version) {
                 showToast(`Version ${data.version} er klar til installation`, 'success');
             }
-            if (['available', 'downloading', 'download-error', 'ready', 'error'].includes(data.status)) {
+            if (['available', 'downloading', 'download-error', 'ready', 'installing', 'error'].includes(data.status)) {
                 manualUpdateCheck.value = false;
             }
         });

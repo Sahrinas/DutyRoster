@@ -42,7 +42,7 @@
 
         <!-- Update banner -->
         <transition name="slide">
-            <div v-if="updateStatus && (['available', 'downloading', 'download-error', 'ready', 'error'].includes(updateStatus.status) || manualUpdateCheck)" class="update-bar">
+            <div v-if="updateStatus && (['available', 'downloading', 'download-error', 'ready', 'installing', 'error'].includes(updateStatus.status) || manualUpdateCheck)" class="update-bar">
                 <div class="update-content">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 2L5 5M8 2l3 3M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span v-if="updateStatus.status === 'checking'">Checker for opdateringer…</span>
@@ -50,6 +50,7 @@
                     <span v-else-if="updateStatus.status === 'downloading'">Henter opdatering... {{ updateStatus.percent }}%</span>
                     <span v-else-if="updateStatus.status === 'download-error'">Downloadfejl: {{ updateStatus.message }}</span>
                     <span v-else-if="updateStatus.status === 'ready'">Version {{ updateStatus.version }} klar til installation</span>
+                    <span v-else-if="updateStatus.status === 'installing'">{{ updateStatus.message }}</span>
                     <span v-else-if="updateStatus.status === 'error'">Opdateringsfejl: {{ updateStatus.message }}</span>
                 </div>
                 <div class="update-actions">
