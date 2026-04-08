@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    font-family: 'Segoe UI', -apple-system, sans-serif;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    overflow: hidden;
+    user-select: none;
+    -webkit-app-region: drag;
+}
+
+.splash {
+    width: 400px;
+    height: 300px;
+    background: linear-gradient(145deg, #0a1628 0%, #060d1b 50%, #0f1d32 100%);
+    border-radius: 20px;
+    border: 1px solid rgba(59, 130, 246, 0.12);
+    box-shadow:
+        0 20px 60px rgba(0, 0, 0, 0.6),
+        0 0 80px rgba(59, 130, 246, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Subtle grid */
+.splash::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        linear-gradient(rgba(59, 130, 246, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 130, 246, 0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0;
+    animation: gridIn 1s 0.3s ease forwards;
+    border-radius: 20px;
+}
+
+/* Top accent line */
+.splash::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 40px;
+    right: 40px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+    opacity: 0;
+    animation: lineIn 0.8s 0.2s ease forwards;
+}
+
+.logo-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeUp 0.6s 0.2s ease forwards;
+}
+
+.logo-icon {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    width: 46px;
+}
+
+.logo-block {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    background: #3b82f6;
+    opacity: 0;
+    transform: scale(0.5);
+}
+
+.logo-block:nth-child(1) { animation: blockIn 0.4s 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.logo-block:nth-child(2) { animation: blockIn 0.4s 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; opacity: 0; }
+.logo-block:nth-child(3) { animation: blockIn 0.4s 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.logo-block:nth-child(4) { animation: blockIn 0.4s 0.75s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+.logo-block:nth-child(2) { --target-opacity: 0.5; }
+.logo-block:nth-child(3) { --target-opacity: 0.5; }
+.logo-block:nth-child(4) { --target-opacity: 0.3; }
+
+.title {
+    font-size: 1.5rem;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    color: #e2e8f0;
+}
+
+.subtitle {
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+.loader-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    opacity: 0;
+    animation: fadeUp 0.5s 0.9s ease forwards;
+}
+
+.loader-track {
+    width: 160px;
+    height: 3px;
+    background: rgba(59, 130, 246, 0.08);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.loader-fill {
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+    border-radius: 2px;
+    animation: loaderSlide 1.2s ease-in-out infinite;
+}
+
+.loader-text {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #475569;
+}
+
+/* Animations */
+@keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes blockIn {
+    to { opacity: var(--target-opacity, 1); transform: scale(1); }
+}
+
+@keyframes gridIn {
+    to { opacity: 1; }
+}
+
+@keyframes lineIn {
+    to { opacity: 1; }
+}
+
+@keyframes loaderSlide {
+    0% { transform: translateX(-160px); }
+    100% { transform: translateX(320px); }
+}
+</style>
+</head>
+<body>
+    <div class="splash">
+        <div class="logo-area">
+            <div class="logo-icon">
+                <div class="logo-block"></div>
+                <div class="logo-block"></div>
+                <div class="logo-block"></div>
+                <div class="logo-block"></div>
+            </div>
+            <div class="title">Vagtplan</div>
+            <div class="subtitle">Duty Roster System</div>
+        </div>
+        <div class="loader-area">
+            <div class="loader-track">
+                <div class="loader-fill"></div>
+            </div>
+            <div class="loader-text">Indlæser...</div>
+        </div>
+    </div>
+</body>
+</html>

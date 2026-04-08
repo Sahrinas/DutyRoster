@@ -1,0 +1,53 @@
+{
+  "name": "vagtplan",
+  "version": "1.0.0",
+  "description": "Duty Roster Planning App",
+  "author": "Sahrina",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:portable": "electron-builder --win portable",
+    "publish": "electron-builder --win --publish always"
+  },
+  "build": {
+    "appId": "com.vagtplan.app",
+    "productName": "Vagtplan",
+    "npmRebuild": false,
+    "publish": {
+      "provider": "github",
+      "owner": "Sahrinas",
+      "repo": "DutyRoster"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "index.html",
+      "app.js",
+      "style.css",
+      "vue.global.prod.js",
+      "splash.html",
+      "icon.ico"
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
+  },
+  "devDependencies": {
+    "electron": "^35.0.1",
+    "electron-builder": "^26.0.12"
+  }
+}

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vagtplan</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Custom title bar area (drag region) -->
+        <div class="title-bar">
+            <div class="title-bar-logo">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2" fill="var(--accent)"/><rect x="14" y="3" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="3" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="14" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.3"/></svg>
+                <span>Vagtplan</span>
+                <span class="version-label" v-if="appVersion">v{{ appVersion }}</span>
+            </div>
+            <div class="title-bar-center">
+                <div class="view-toggle">
+                    <button :class="{ active: viewMode === 'week' }" @click="setViewMode('week')">Uge</button>
+                    <button :class="{ active: viewMode === 'month' }" @click="setViewMode('month')">Måned</button>
+                </div>
+                <div class="nav-divider"></div>
+                <div class="week-nav">
+                    <button class="nav-arrow" @click="navPrev" aria-label="Previous">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <span class="period-label">{{ periodLabel }}</span>
+                    <button class="nav-arrow" @click="navNext" aria-label="Next">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                    <transition name="fade">
+                        <button v-if="!isCurrentPeriod" class="today-btn" @click="goToday">I dag</button>
+                    </transition>
+                </div>
+            </div>
+        </div>
+
+        <!-- Update banner -->
+        <transition name="slide">
+            <div v-if="updateStatus && updateStatus.status !== 'up-to-date' && updateStatus.status !== 'checking'" class="update-bar">
+                <div class="update-content">
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 2L5 5M8 2l3 3M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span v-if="updateStatus.status === 'available'">Ny version {{ updateStatus.version }} tilgængelig — henter...</span>
+                    <span v-else-if="updateStatus.status === 'downloading'">Henter opdatering... {{ updateStatus.percent }}%</span>
+                    <span v-else-if="updateStatus.status === 'ready'">Version {{ updateStatus.version }} klar til installation</span>
+                    <span v-else-if="updateStatus.status === 'error'">Opdateringsfejl: {{ updateStatus.message }}</span>
+                </div>
+                <div class="update-actions">
+                    <div v-if="updateStatus.status === 'downloading'" class="update-progress">
+                        <div class="update-progress-bar" :style="{ width: updateStatus.percent + '%' }"></div>
+                    </div>
+                    <button v-if="updateStatus.status === 'ready'" class="update-install-btn" @click="installUpdate">Genstart &amp; installer</button>
+                    <button v-if="updateStatus.status === 'error'" class="update-dismiss-btn" @click="updateStatus = null">Luk</button>
+                </div>
+            </div>
+        </transition>
+
+        <div class="app-container">
+            <!-- Summary bar -->
+            <div class="week-summary">
+                <div
+                    v-for="dayInfo in visibleDays"
+                    :key="'sum-' + dayInfo.dateKey"
+                    :class="['summary-pip', {
+                        full: isDayFull(dayInfo.dateKey),
+                        partial: !isDayFull(dayInfo.dateKey) && hasAnyAssignment(dayInfo.dateKey),
+                        today: dayInfo.dateKey === todayKey
+                    }]"
+                    :title="dayInfo.name + ' ' + dayInfo.display + ' — ' + getFilledCount(dayInfo.dateKey) + '/' + slotsPerDay"
+                >
+                    <span class="pip-label">{{ viewMode === 'month' ? dayInfo.dayNum : dayInfo.name.slice(0, 2) }}</span>
+                </div>
+            </div>
+
+            <main>
+              <div class="sidebar">
+                <section class="panel standby-pool">
+                    <div class="panel-header">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
+                        <h2>Standby</h2>
+                        <span class="badge" v-if="standbyList.length">{{ standbyList.length }}</span>
+                    </div>
+                    <div class="standby-list" :class="{ 'drag-over': standbyDragOver }" @dragover.prevent="standbyDragOver = true" @dragleave="standbyDragOver = false" @drop="onDropToStandby($event)">
+                        <div
+                            v-for="entry in standbyList"
+                            :key="'sb-' + entry.empId"
+                            :class="['standby-chip', colorClass(entry.empId)]"
+                            draggable="true"
+                            @dragstart="onDragStartFromStandby($event, entry.empId)"
+                            @dragend="dragState = null"
+                        >
+                            <div class="standby-chip-header">
+                                <span class="standby-name">{{ getStandbyEmployee(entry.empId)?.name }}</span>
+                                <button class="activate-btn" @click="activateFromStandby(entry.empId)" title="Aktiver medic">
+                                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                </button>
+                            </div>
+                            <textarea
+                                class="standby-comment"
+                                :value="entry.comment"
+                                @input="updateStandbyComment(entry.empId, $event.target.value)"
+                                placeholder="Årsag..."
+                                rows="2"
+                            ></textarea>
+                        </div>
+                        <div v-if="standbyList.length === 0" class="empty-state">
+                            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" opacity="0.3"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
+                            <span>Træk medic hertil</span>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel employee-pool">
+                    <div class="panel-header">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 14.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        <h2>Medics</h2>
+                        <span class="badge">{{ filteredEmployees.length }}</span>
+                    </div>
+                    <div class="add-employee">
+                        <input
+                            v-model="newEmployeeName"
+                            @keydown.enter="addEmployee"
+                            placeholder="Tilføj ny medic..."
+                        >
+                        <button @click="addEmployee" class="add-btn" title="Tilføj">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                    </div>
+
+                    <div v-if="employees.length > 4" class="search-box">
+                        <svg class="search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        <input v-model="searchQuery" placeholder="Søg medic..." class="search-input">
+                    </div>
+
+                    <div class="employee-list" @dragover.prevent @drop="onDropToPool">
+                        <div
+                            v-for="emp in filteredEmployees"
+                            :key="emp.id"
+                            :class="['employee-chip', colorClass(emp.id)]"
+                            draggable="true"
+                            @dragstart="onDragStartFromPool($event, emp.id)"
+                            @dragend="dragState = null"
+                        >
+                            <div class="chip-info">
+                                <span class="chip-name">{{ emp.name }}</span>
+                                <div class="duty-counts">
+                                    <span
+                                        v-for="mc in getMonthlyStats(emp.id)"
+                                        :key="mc.key"
+                                        class="duty-count"
+                                        :title="mc.count + ' vagter i ' + mc.label"
+                                    >{{ mc.short }}: {{ mc.count }}</span>
+                                </div>
+                            </div>
+                            <div class="chip-actions">
+                                <button class="chip-action-btn standby-btn" @click.stop="moveToStandby(emp.id)" title="Sæt på standby">
+                                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="4" height="12" rx="1" fill="currentColor"/><rect x="9" y="2" width="4" height="12" rx="1" fill="currentColor"/></svg>
+                                </button>
+                                <button class="chip-action-btn remove-btn" @click.stop="removeEmployee(emp.id)" title="Fjern">
+                                    <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="employees.length === 0" class="empty-state">
+                            <svg width="20" height="20" viewBox="0 0 16 16" fill="none" opacity="0.3"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 14.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                            <span>Tilføj medics ovenfor</span>
+                        </div>
+                        <div v-else-if="filteredEmployees.length === 0" class="empty-state">
+                            <span>Ingen resultater</span>
+                        </div>
+                    </div>
+                </section>
+              </div>
+
+                <section class="roster">
+                    <div class="day-toggles">
+                        <span class="toggles-label">Aktive dage</span>
+                        <button
+                            v-for="(day, i) in dayNames"
+                            :key="i"
+                            :class="['day-toggle', { active: activeDays.includes(i) }]"
+                            @click="toggleDay(i)"
+                        >{{ day.slice(0, 3) }}</button>
+                    </div>
+
+                    <div class="toolbar">
+                        <div class="toolbar-group">
+                            <button class="toolbar-btn" @click="exportImage" title="Eksporter som billede">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 11v3h12v-3M8 2v8M8 10L4.5 6.5M8 10l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>Billede</span>
+                            </button>
+                            <button class="toolbar-btn" @click="exportCSV" title="Eksporter som CSV">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 2h8l4 4v8H2V2z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 2v4h4M5 9h6M5 11.5h4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>CSV</span>
+                            </button>
+                            <button class="toolbar-btn" @click="$refs.csvFileInput.click()" title="Importer fra CSV">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 5V2h12v3M8 14V6M8 6l3.5 3.5M8 6L4.5 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>Import</span>
+                            </button>
+                            <input type="file" ref="csvFileInput" accept=".csv" style="display:none" @change="importCSV($event)">
+                        </div>
+                        <div class="toolbar-divider"></div>
+                        <div class="toolbar-group">
+                            <button class="toolbar-btn accent" @click="autoFill" title="Auto-fordel medics">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                <span>Auto-fyld</span>
+                            </button>
+                            <button class="toolbar-btn warn" @click="clearPeriod" title="Ryd alle tildelinger">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 4h10M5 4V3h6v1M6 7v5M10 7v5M4 4l1 10h6l1-10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>{{ viewMode === 'week' ? 'Ryd uge' : 'Ryd måned' }}</span>
+                            </button>
+                            <button class="toolbar-btn ghost" @click="undo" :disabled="undoStack.length === 0" title="Fortryd (Ctrl+Z)">
+                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M3 7h7a3 3 0 0 1 0 6H9M3 7l3-3M3 7l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <span>Fortryd</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <transition-group name="conflict" tag="div" class="conflicts" v-if="conflicts.length">
+                        <div v-for="(c, ci) in conflicts" :key="ci" class="conflict-item">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1L1 14h14L8 1z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><path d="M8 6v4M8 12v.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                            {{ c }}
+                        </div>
+                    </transition-group>
+
+                    <!-- Month view -->
+                    <template v-if="viewMode === 'month'">
+                        <div class="month-col-headers" :style="{ 'grid-template-columns': 'repeat(' + activeDays.length + ', 1fr)' }">
+                            <div v-for="di in activeDays" :key="'mch-' + di" class="month-col-header">{{ dayNames[di].slice(0, 3) }}</div>
+                        </div>
+                        <div v-for="(week, wi) in weekGroups" :key="'wg-' + wi" class="week-row">
+                            <div class="week-row-label"><span>Uge {{ week.weekNum }}</span></div>
+                            <div class="roster-grid roster-grid-month" :style="{ 'grid-template-columns': 'repeat(' + activeDays.length + ', 1fr)' }">
+                                <div
+                                    v-for="dayInfo in week.days"
+                                    :key="dayInfo.dateKey"
+                                    :class="['day-card', 'day-card-compact', {
+                                        'day-card-full': isDayFull(dayInfo.dateKey),
+                                        'day-card-today': dayInfo.dateKey === todayKey,
+                                    }]"
+                                    :style="{ 'grid-column': getDayColumn(dayInfo.index) }"
+                                >
+                                    <div class="day-card-header">
+                                        <div class="day-header-left">
+                                            <span class="day-name">{{ dayInfo.name.slice(0, 3) }}</span>
+                                            <span v-if="dayInfo.dateKey === todayKey" class="today-tag">I dag</span>
+                                        </div>
+                                        <span class="day-date">{{ dayInfo.display }}</span>
+                                    </div>
+                                    <div class="day-card-slots">
+                                        <template v-for="s in slotsPerDay" :key="s">
+                                            <div class="slot-label">Slot {{ s }}</div>
+                                            <div v-if="getAssignedEmployee(dayInfo.dateKey, s - 1)" :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1).id)]" draggable="true" @dragstart="onDragStartFromSlot($event, getAssignedEmployee(dayInfo.dateKey, s - 1).id, dayInfo.dateKey, s - 1)" @dragend="dragState = null" @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)" @dragleave="slotDragOver = null" @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)">
+                                                <div class="slot-content">
+                                                    <span>{{ getAssignedEmployee(dayInfo.dateKey, s - 1).name }}</span>
+                                                    <span v-if="getRecurrence(dayInfo.dateKey, s - 1)" class="recur-badge" :title="getRecurrenceLabel(getRecurrence(dayInfo.dateKey, s - 1))">{{ getRecurrenceShort(getRecurrence(dayInfo.dateKey, s - 1)) }}</span>
+                                                </div>
+                                                <div class="slot-actions">
+                                                    <button class="recur-btn" :class="{ active: getRecurrence(dayInfo.dateKey, s - 1) }" @click.stop="openRecurMenu(dayInfo.dateKey, s - 1, $event)" title="Gentag"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></button>
+                                                    <button class="unassign-btn" @click.stop="unassign(dayInfo.dateKey, s - 1)" title="Fjern"><svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                                                </div>
+                                            </div>
+                                            <div v-else :class="['slot', 'empty', { 'drag-over': slotDragOver === dayInfo.dateKey + '-' + (s - 1) }]" @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)" @dragleave="slotDragOver = null" @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)">
+                                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" opacity="0.4"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                                            </div>
+                                        </template>
+                                    </div>
+                                    <div class="day-notes">
+                                        <input :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Note..." class="note-input">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <!-- Week view -->
+                    <div v-else class="roster-grid">
+                        <div
+                            v-for="dayInfo in visibleDays"
+                            :key="dayInfo.dateKey"
+                            :class="['day-card', {
+                                'day-card-full': isDayFull(dayInfo.dateKey),
+                                'day-card-today': dayInfo.dateKey === todayKey,
+                            }]"
+                        >
+                            <div class="day-card-header">
+                                <div class="day-header-left">
+                                    <span class="day-name">{{ dayInfo.name }}</span>
+                                    <span v-if="dayInfo.dateKey === todayKey" class="today-tag">I dag</span>
+                                </div>
+                                <span class="day-date">{{ dayInfo.display }}</span>
+                            </div>
+                            <div class="day-card-slots">
+                                <template v-for="s in slotsPerDay" :key="s">
+                                    <div class="slot-label">Vagt {{ s }}</div>
+                                    <div
+                                        v-if="getAssignedEmployee(dayInfo.dateKey, s - 1)"
+                                        :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1).id)]"
+                                        draggable="true"
+                                        @dragstart="onDragStartFromSlot($event, getAssignedEmployee(dayInfo.dateKey, s - 1).id, dayInfo.dateKey, s - 1)"
+                                        @dragend="dragState = null"
+                                        @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)"
+                                        @dragleave="slotDragOver = null"
+                                        @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)"
+                                    >
+                                        <div class="slot-content">
+                                            <span>{{ getAssignedEmployee(dayInfo.dateKey, s - 1).name }}</span>
+                                            <span v-if="getRecurrence(dayInfo.dateKey, s - 1)" class="recur-badge" :title="getRecurrenceLabel(getRecurrence(dayInfo.dateKey, s - 1))">
+                                                {{ getRecurrenceShort(getRecurrence(dayInfo.dateKey, s - 1)) }}
+                                            </span>
+                                        </div>
+                                        <div class="slot-actions">
+                                            <button class="recur-btn" :class="{ active: getRecurrence(dayInfo.dateKey, s - 1) }" @click.stop="openRecurMenu(dayInfo.dateKey, s - 1, $event)" title="Gentag">
+                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                                            </button>
+                                            <button class="unassign-btn" @click.stop="unassign(dayInfo.dateKey, s - 1)" title="Fjern"><svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-else
+                                        :class="['slot', 'empty', { 'drag-over': slotDragOver === dayInfo.dateKey + '-' + (s - 1) }]"
+                                        @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)"
+                                        @dragleave="slotDragOver = null"
+                                        @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)"
+                                    >
+                                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" opacity="0.4"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+                                    </div>
+                                </template>
+                            </div>
+                            <div class="day-notes">
+                                <input :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Tilføj note..." class="note-input">
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <!-- Recurrence menu -->
+            <div v-if="recurMenu" class="recur-menu-overlay" @click="recurMenu = null"></div>
+            <div v-if="recurMenu" class="recur-menu" :style="{ top: recurMenu.y + 'px', left: recurMenu.x + 'px' }">
+                <div class="recur-menu-title">Fast dag</div>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'weekly' }" @click="setRecurrence('weekly')"><span class="recur-icon">7</span> Hver uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'biweekly' }" @click="setRecurrence('biweekly')"><span class="recur-icon">14</span> Hver 2. uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'triweekly' }" @click="setRecurrence('triweekly')"><span class="recur-icon">21</span> Hver 3. uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'monthly' }" @click="setRecurrence('monthly')"><span class="recur-icon">30</span> Hver måned</button>
+                <div class="recur-menu-title">Tilfældig dag</div>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'random-weekly' }" @click="setRecurrence('random-weekly')"><span class="recur-icon">~7</span> Hver uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'random-biweekly' }" @click="setRecurrence('random-biweekly')"><span class="recur-icon">~14</span> Hver 2. uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'random-triweekly' }" @click="setRecurrence('random-triweekly')"><span class="recur-icon">~21</span> Hver 3. uge</button>
+                <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'random-monthly' }" @click="setRecurrence('random-monthly')"><span class="recur-icon">~30</span> Hver måned</button>
+                <button class="recur-remove" @click="setRecurrence(null)">Fjern gentagelse</button>
+            </div>
+
+            <!-- Toast notifications -->
+            <transition name="toast">
+                <div v-if="toast" class="toast" :class="toast.type">{{ toast.message }}</div>
+            </transition>
+        </div>
+    </div>
+
+    <script src="vue.global.prod.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
