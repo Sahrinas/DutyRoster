@@ -228,8 +228,16 @@ function setupAutoUpdater() {
     }, 3000);
 }
 
-ipcMain.on('install-update', () => {
-    autoUpdater.quitAndInstall(false, true);
+ipcMain.handle('install-update', async (_event, options) => {
+    console.log('[Updater] install-update invoked', options);
+    try {
+        autoUpdater.quitAndInstall(false, true);
+        return { success: true };
+    }
+    catch (err) {
+        console.error('[Updater] quitAndInstall error', err);
+        return { success: false, message: err?.message || 'Unknown error' };
+    }
 });
 
 ipcMain.on('check-for-updates', () => {

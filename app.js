@@ -127,8 +127,15 @@ createApp({
         async function installUpdate() {
             showToast('Installing update...', 'info');
             flushPersistSync();
-            setTimeout(() => {
-                if (window.electronAPI) window.electronAPI.installUpdate();
+            setTimeout(async () => {
+                if (!window.electronAPI || !window.electronAPI.installUpdate) {
+                    showToast('Installationsfunktion ikke tilgængelig.', 'error');
+                    return;
+                }
+                const result = await window.electronAPI.installUpdate({ silent: false, force: true });
+                if (!result?.success) {
+                    showToast('Kunne ikke installere opdatering: ' + (result?.message || 'Ukendt fejl'), 'error');
+                }
             }, 500);
         }
 
