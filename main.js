@@ -185,6 +185,7 @@ let updateState = {
 };
 let updateCheckInFlight = false;
 let updateDownloadInFlight = false;
+let updateReadyToInstall = false;
 
 function sendToRenderer(channel, data) {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -216,6 +217,7 @@ function checkForUpdates(manual = false) {
 
     autoUpdater.checkForUpdates().catch((err) => {
         updateCheckInFlight = false;
+        updateReadyToInstall = false;
         const message = err?.message || 'Ukendt fejl';
         if (message.includes('404') || message.includes('latest.yml')) {
             setUpdateState({ status: 'up-to-date', manual: false, message: null });
@@ -229,6 +231,7 @@ function downloadUpdate() {
     if (updateDownloadInFlight || !['available', 'download-error'].includes(updateState.status)) return;
 
     updateDownloadInFlight = true;
+    updateReadyToInstall = false;
     setUpdateState({
         status: 'downloading',
         manual: true,
@@ -254,6 +257,7 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-available', (info) => {
         updateCheckInFlight = false;
+        updateReadyToInstall = false;
         setUpdateState({
             status: 'available',
             version: info.version,
@@ -265,6 +269,7 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-not-available', () => {
         updateCheckInFlight = false;
+        updateReadyToInstall = false;
         setUpdateState({
             status: 'up-to-date',
             manual: false,
@@ -282,6 +287,7 @@ function setupAutoUpdater() {
 
     autoUpdater.on('update-downloaded', (info) => {
         updateDownloadInFlight = false;
+        updateReadyToInstall = true;
         setUpdateState({
             status: 'ready',
             version: info.version,
@@ -293,6 +299,7 @@ function setupAutoUpdater() {
     autoUpdater.on('error', (err) => {
         updateCheckInFlight = false;
         updateDownloadInFlight = false;
+        updateReadyToInstall = false;
         // Silently ignore 404 errors (no release published yet)
         if (err?.message?.includes('404') || err?.message?.includes('latest.yml')) return;
         setUpdateState({
@@ -308,12 +315,47 @@ function setupAutoUpdater() {
 
 ipcMain.on('install-update', (_event) => {
     console.log('[Updater] install-update invoked');
+
+    if (!app.isPackaged) {
+        setUpdateState({
+            status: 'error',
+            manual: true,
+            message: 'Installering virker kun i den installerede app, ikke via npm start.',
+        });
+        return;
+    }
+
+    if (typeof autoUpdater.isUpdaterActive === 'function' && !autoUpdater.isUpdaterActive()) {
+        setUpdateState({
+            status: 'error',
+            manual: true,
+            message: 'Updater er ikke aktiv i denne build.',
+        });
+        return;
+    }
+
+    if (!updateReadyToInstall) {
+        setUpdateState({
+            status: 'error',
+            manual: true,
+            message: 'Der er ingen downloadet opdatering klar til installation endnu.',
+        });
+        return;
+    }
+
     try {
-        autoUpdater.quitAndInstall(true, true);
+        setUpdateState({
+            status: 'installing',
+            manual: true,
+            message: 'Lukker appen og starter installationen...',
+        });
+        setImmediate(() => {
+            autoUpdater.quitAndInstall(false, true);
+        });
     }
     catch (err) {
         console.error('[Updater] quitAndInstall error', err);
-        sendToRenderer('update-status', { status: 'error', message: err?.message || 'Ukendt fejl' });
+        setUpdateState({ status: 'error', manual: true, message: err?.message || 'Ukendt fejl' });
     }
 });
 
