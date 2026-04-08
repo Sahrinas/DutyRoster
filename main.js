@@ -173,7 +173,7 @@ let splash;
 
 // ===== AUTO UPDATER CONFIG =====
 autoUpdater.autoDownload = true;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.logger = console;
 
 function sendToRenderer(channel, data) {
@@ -231,6 +231,7 @@ ipcMain.on('install-update', () => {
 });
 
 ipcMain.on('check-for-updates', () => {
+    sendToRenderer('update-status', { status: 'checking' });
     autoUpdater.checkForUpdates().catch(() => {});
 });
 

@@ -61,6 +61,7 @@ createApp({
         // ===== AUTO UPDATE =====
         const appVersion = ref(null);
         const updateStatus = ref(null);
+        const manualUpdateCheck = ref(false);
 
         function flushPersistSync() {
             const data = getStateSnapshot();
@@ -79,9 +80,28 @@ createApp({
             if (window.electronAPI) window.electronAPI.installUpdate();
         }
 
+        function checkForUpdates() {
+            if (!window.electronAPI) {
+                showToast('Opdateringer kan kun tjekkes i app-tilstand', 'error');
+                return;
+            }
+            manualUpdateCheck.value = true;
+            updateStatus.value = { status: 'checking' };
+            window.electronAPI.checkForUpdates();
+        }
+
         if (window.electronAPI) {
             window.electronAPI.onAppVersion((v) => { appVersion.value = v; });
-            window.electronAPI.onUpdateStatus((data) => { updateStatus.value = data; });
+            window.electronAPI.onUpdateStatus((data) => {
+                updateStatus.value = data;
+                if (data.status === 'up-to-date' && manualUpdateCheck.value) {
+                    manualUpdateCheck.value = false;
+                    showToast('Du har den nyeste version', 'success');
+                }
+                if (['available', 'downloading', 'ready', 'error'].includes(data.status)) {
+                    manualUpdateCheck.value = false;
+                }
+            });
         }
 
         // ===== PERSIST =====
@@ -427,6 +447,16 @@ createApp({
                     const weeks = weeksBetween(startMonday, monday);
                     if (weeks < 0) return;
                     const wholeWeeks = Math.round(weeks);
+                    const startMonthNum = start.getFullYear() * 12 + start.getMonth();
+                    const monthNum = date.getFullYear() * 12 + date.getMonth();
+
+                    if (isRandom) {
+                        if (baseFreq === 'monthly') {
+                            if (monthNum === startMonthNum) return;
+                        } else if (wholeWeeks === 0) {
+                            return;
+                        }
+                    }
 
                     let matches = false;
                     if (baseFreq === 'weekly') matches = wholeWeeks >= 0;
@@ -434,8 +464,8 @@ createApp({
                     else if (baseFreq === 'triweekly') matches = wholeWeeks % 3 === 0;
                     else if (baseFreq === 'monthly') {
                         if (isRandom) {
-                            // For random-monthly, match once per month
-                            matches = date.getMonth() >= start.getMonth() || date.getFullYear() > start.getFullYear();
+                            // For random-monthly, match once per month.
+                            matches = monthNum > startMonthNum;
                         } else {
                             matches = date.getDate() === start.getDate();
                         }
@@ -467,9 +497,17 @@ createApp({
                     if (!employees.value.find(e => e.id === rule.employeeId)) return;
                     if (!assignments.value[dayInfo.dateKey]) assignments.value[dayInfo.dateKey] = new Array(slotsPerDay).fill(null);
                     const slots = assignments.value[dayInfo.dateKey];
-                    if (slots[rule.slotIndex] != null) return;
                     if (slots.includes(rule.employeeId)) return;
-                    slots.splice(rule.slotIndex, 1, rule.employeeId);
+                    let targetSlot = rule.slotIndex;
+                    if (isRandom) {
+                        // Preferred open slot order: slot 1 first, then slot 2.
+                        const preferredSlots = [0, 1];
+                        targetSlot = preferredSlots.find(i => i < slotsPerDay && slots[i] == null);
+                        if (targetSlot === undefined) return;
+                    } else {
+                        if (slots[rule.slotIndex] != null) return;
+                    }
+                    slots.splice(targetSlot, 1, rule.employeeId);
                 });
             });
         }
@@ -781,7 +819,8 @@ createApp({
             const date = parseDate(dateKey);
             const dayOfWeek = (date.getDay() + 6) % 7;
             const rule = recurrences.value.find(r =>
-                r.employeeId === emp.id && r.slotIndex === slotIndex &&
+                r.employeeId === emp.id &&
+                (r.slotIndex === slotIndex || r.frequency.startsWith('random-')) &&
                 (r.dayOfWeek === dayOfWeek || r.frequency.startsWith('random-'))
             );
             return rule ? rule.frequency : null;
@@ -1194,7 +1233,7 @@ createApp({
             dayNames, slotsPerDay, employees, activeDays, weekOffset, monthOffset,
             viewMode, assignments, recurrences, notes, newEmployeeName, dragState,
             slotDragOver, recurMenu, searchQuery, undoStack, toast,
-            appVersion, updateStatus, installUpdate, periodLabel, visibleDays,
+            appVersion, updateStatus, manualUpdateCheck, installUpdate, checkForUpdates, periodLabel, visibleDays,
             weekGroups, todayKey, isCurrentPeriod, filteredEmployees, conflicts,
             standby, standbyList, standbyIds, standbyDragOver,
             moveToStandby, activateFromStandby, updateStandbyComment,
