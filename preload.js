@@ -5,4 +5,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onAppVersion: (callback) => ipcRenderer.on('app-version', (_e, version) => callback(version)),
     installUpdate: () => ipcRenderer.send('install-update'),
     checkForUpdates: () => ipcRenderer.send('check-for-updates'),
+    loadData: () => ipcRenderer.invoke('load-data'),
+    saveData: (data) => ipcRenderer.invoke('save-data', data),
+    saveDataSync: (data) => ipcRenderer.sendSync('save-data-sync', data),
 });

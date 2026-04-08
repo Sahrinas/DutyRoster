@@ -1,6 +1,6 @@
 {
   "name": "vagtplan",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "description": "Duty Roster Planning App",
   "author": "Sahrina",
   "main": "main.js",
@@ -13,6 +13,7 @@
   "build": {
     "appId": "com.vagtplan.app",
     "productName": "Vagtplan",
+    "artifactName": "${productName}-Setup-${version}.${ext}",
     "npmRebuild": false,
     "publish": {
       "provider": "github",
@@ -33,6 +34,7 @@
       "createStartMenuShortcut": true
     },
     "files": [
+      "package.json",
       "main.js",
       "preload.js",
       "index.html",

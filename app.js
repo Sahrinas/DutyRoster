@@ -2,16 +2,36 @@ const { createApp, ref, computed, watch, nextTick } = Vue;
 
 const STORAGE_KEY = 'dutyRoster';
 
+// Load saved data synchronously from localStorage first (quick start),
+// then overwrite from file storage if available (Electron)
+function loadSavedSync() {
+    try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : {}; }
+    catch { return {}; }
+}
+
+function hasMeaningfulData(data) {
+    if (!data || typeof data !== 'object') return false;
+    return Boolean(
+        (Array.isArray(data.employees) && data.employees.length) ||
+        (Array.isArray(data.recurrences) && data.recurrences.length) ||
+        (Array.isArray(data.standby) && data.standby.length) ||
+        (data.assignments && Object.keys(data.assignments).length) ||
+        (data.notes && Object.keys(data.notes).length) ||
+        (Array.isArray(data.activeDays) && data.activeDays.join(',') !== '0,1,2,3,4') ||
+        data.weekOffset ||
+        data.monthOffset ||
+        data.viewMode === 'month'
+    );
+}
+
 createApp({
     setup() {
         const dayNames = ['Mandag', 'Tirsdag', 'Onsdag', 'Tordag', 'Fredag', 'Lørdag', 'Søndag'];
         const slotsPerDay = 2;
         const MAX_CONSECUTIVE = 5;
+        const dataReady = ref(false);
 
-        const saved = (() => {
-            try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : {}; }
-            catch { return {}; }
-        })();
+        const saved = loadSavedSync();
 
         const employees = ref(saved.employees || []);
         const activeDays = ref(saved.activeDays || [0, 1, 2, 3, 4]);
@@ -42,7 +62,20 @@ createApp({
         const appVersion = ref(null);
         const updateStatus = ref(null);
 
-        function installUpdate() {
+        function flushPersistSync() {
+            const data = getStateSnapshot();
+            const snapshotJson = serializeSnapshot(data);
+            lastSnapshotJson = snapshotJson;
+            queuedPersist = false;
+            localStorage.setItem(STORAGE_KEY, snapshotJson);
+            if (window.electronAPI?.saveDataSync) {
+                return window.electronAPI.saveDataSync(data);
+            }
+            return true;
+        }
+
+        async function installUpdate() {
+            flushPersistSync();
             if (window.electronAPI) window.electronAPI.installUpdate();
         }
 
@@ -52,16 +85,107 @@ createApp({
         }
 
         // ===== PERSIST =====
-        function persist() {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        function getStateSnapshot() {
+            return {
                 employees: employees.value, activeDays: activeDays.value,
                 weekOffset: weekOffset.value, monthOffset: monthOffset.value,
                 viewMode: viewMode.value, assignments: assignments.value,
                 recurrences: recurrences.value, notes: notes.value,
                 standby: standby.value,
-            }));
+            };
         }
-        watch([employees, activeDays, weekOffset, monthOffset, viewMode, assignments, recurrences, notes, standby], persist, { deep: true });
+
+        let persistEnabled = false;
+        let lastSnapshotJson = '';
+        let saveInFlight = false;
+        let queuedPersist = false;
+
+        function serializeSnapshot(data) {
+            return JSON.stringify(data);
+        }
+
+        function persist(snapshotJson = serializeSnapshot(getStateSnapshot())) {
+            if (!persistEnabled) return;
+            if (snapshotJson === lastSnapshotJson) return;
+
+            lastSnapshotJson = snapshotJson;
+            localStorage.setItem(STORAGE_KEY, snapshotJson);
+
+            if (!window.electronAPI?.saveData) return;
+            if (saveInFlight) {
+                queuedPersist = true;
+                return;
+            }
+
+            saveInFlight = true;
+            const data = JSON.parse(snapshotJson);
+            window.electronAPI.saveData(data)
+                .catch((error) => {
+                    console.error('[Storage] Async save failed:', error);
+                })
+                .finally(() => {
+                    saveInFlight = false;
+                    if (queuedPersist) {
+                        queuedPersist = false;
+                        persist(stateSnapshotJson.value);
+                    }
+                });
+        }
+
+        const stateSnapshotJson = computed(() => serializeSnapshot(getStateSnapshot()));
+        watch(stateSnapshotJson, (snapshotJson) => {
+            persist(snapshotJson);
+        });
+
+        // Load from Electron file storage, then enable persistence
+        function applyData(data) {
+            if (!data) return;
+            if (data.employees) employees.value = data.employees;
+            if (data.activeDays) activeDays.value = data.activeDays;
+            if (data.weekOffset != null) weekOffset.value = data.weekOffset;
+            if (data.monthOffset != null) monthOffset.value = data.monthOffset;
+            if (data.viewMode) viewMode.value = data.viewMode;
+            if (data.assignments) assignments.value = data.assignments;
+            if (data.recurrences) recurrences.value = data.recurrences;
+            if (data.notes) notes.value = data.notes;
+            if (data.standby) standby.value = data.standby;
+        }
+
+        if (window.electronAPI?.loadData) {
+            window.electronAPI.loadData().then((result) => {
+                const fileData = result?.data || result;
+                const fileSource = result?.source || 'primary';
+                const localData = saved;
+                const shouldMigrateLocal =
+                    fileSource === 'default' &&
+                    hasMeaningfulData(localData) &&
+                    !hasMeaningfulData(fileData);
+
+                if (shouldMigrateLocal) {
+                    applyData(localData);
+                } else if (fileData) {
+                    applyData(fileData);
+                }
+
+                lastSnapshotJson = serializeSnapshot(getStateSnapshot());
+                dataReady.value = true;
+                nextTick(() => {
+                    persistEnabled = true;
+                    if (shouldMigrateLocal) {
+                        flushPersistSync();
+                    } else {
+                        persist(stateSnapshotJson.value);
+                    }
+                });
+            });
+        } else {
+            lastSnapshotJson = serializeSnapshot(getStateSnapshot());
+            dataReady.value = true;
+            persistEnabled = true;
+            nextTick(() => {
+                persist(stateSnapshotJson.value);
+            });
+        }
 
         // ===== UNDO =====
         function saveUndo() {
@@ -76,6 +200,11 @@ createApp({
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (e) => {
                 if ((e.ctrlKey || e.metaKey) && e.key === 'z') { e.preventDefault(); undo(); }
+            });
+            window.addEventListener('beforeunload', flushPersistSync);
+            window.addEventListener('pagehide', flushPersistSync);
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'hidden') flushPersistSync();
             });
         }
 
