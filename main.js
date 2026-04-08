@@ -174,9 +174,17 @@ let mainWindow;
 let splash;
 
 // ===== AUTO UPDATER CONFIG =====
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = false;
 autoUpdater.autoInstallOnAppQuit = false;
 autoUpdater.logger = console;
+autoUpdater.allowPrerelease = false;
+
+let updateState = {
+    status: 'idle',
+    manual: false,
+};
+let updateCheckInFlight = false;
+let updateDownloadInFlight = false;
 
 function sendToRenderer(channel, data) {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -184,47 +192,117 @@ function sendToRenderer(channel, data) {
     }
 }
 
+function setUpdateState(patch) {
+    updateState = {
+        ...updateState,
+        ...patch,
+    };
+    sendToRenderer('update-status', updateState);
+}
+
+function checkForUpdates(manual = false) {
+    if (updateCheckInFlight) {
+        if (manual) setUpdateState({ manual: true });
+        return;
+    }
+
+    updateCheckInFlight = true;
+    setUpdateState({
+        status: 'checking',
+        manual,
+        percent: null,
+        message: null,
+    });
+
+    autoUpdater.checkForUpdates().catch((err) => {
+        updateCheckInFlight = false;
+        const message = err?.message || 'Ukendt fejl';
+        if (message.includes('404') || message.includes('latest.yml')) {
+            setUpdateState({ status: 'up-to-date', manual: false, message: null });
+            return;
+        }
+        setUpdateState({ status: 'error', manual, message });
+    });
+}
+
+function downloadUpdate() {
+    if (updateDownloadInFlight || !['available', 'download-error'].includes(updateState.status)) return;
+
+    updateDownloadInFlight = true;
+    setUpdateState({
+        status: 'downloading',
+        manual: true,
+        percent: 0,
+        message: null,
+    });
+
+    autoUpdater.downloadUpdate().catch((err) => {
+        updateDownloadInFlight = false;
+        setUpdateState({
+            status: 'download-error',
+            manual: true,
+            message: err?.message || 'Kunne ikke hente opdateringen',
+            percent: null,
+        });
+    });
+}
+
 function setupAutoUpdater() {
     autoUpdater.on('checking-for-update', () => {
-        sendToRenderer('update-status', { status: 'checking' });
+        setUpdateState({ status: 'checking' });
     });
 
     autoUpdater.on('update-available', (info) => {
-        sendToRenderer('update-status', {
+        updateCheckInFlight = false;
+        setUpdateState({
             status: 'available',
             version: info.version,
+            releaseDate: info.releaseDate,
+            percent: null,
+            message: null,
         });
     });
 
     autoUpdater.on('update-not-available', () => {
-        sendToRenderer('update-status', { status: 'up-to-date' });
+        updateCheckInFlight = false;
+        setUpdateState({
+            status: 'up-to-date',
+            manual: false,
+            percent: null,
+            message: null,
+        });
     });
 
     autoUpdater.on('download-progress', (progress) => {
-        sendToRenderer('update-status', {
+        setUpdateState({
             status: 'downloading',
             percent: Math.round(progress.percent),
         });
     });
 
     autoUpdater.on('update-downloaded', (info) => {
-        sendToRenderer('update-status', {
+        updateDownloadInFlight = false;
+        setUpdateState({
             status: 'ready',
             version: info.version,
+            percent: 100,
+            message: null,
         });
     });
 
     autoUpdater.on('error', (err) => {
+        updateCheckInFlight = false;
+        updateDownloadInFlight = false;
         // Silently ignore 404 errors (no release published yet)
         if (err?.message?.includes('404') || err?.message?.includes('latest.yml')) return;
-        sendToRenderer('update-status', {
-            status: 'error',
+        setUpdateState({
+            status: updateState.status === 'downloading' ? 'download-error' : 'error',
             message: err?.message || 'Ukendt fejl',
         });
     });
 
     setTimeout(() => {
-        autoUpdater.checkForUpdates().catch(() => {});
+        checkForUpdates(false);
     }, 3000);
 }
 
@@ -240,8 +318,11 @@ ipcMain.on('install-update', (_event) => {
 });
 
 ipcMain.on('check-for-updates', () => {
-    sendToRenderer('update-status', { status: 'checking' });
-    autoUpdater.checkForUpdates().catch(() => {});
+    checkForUpdates(true);
+});
+
+ipcMain.on('download-update', () => {
+    downloadUpdate();
 });
 
 // ===== SPLASH SCREEN =====
@@ -300,6 +381,7 @@ function createWindow() {
 
     mainWindow.webContents.on('did-finish-load', () => {
         sendToRenderer('app-version', app.getVersion());
+        sendToRenderer('update-status', updateState);
         // Close splash and show main window after a short delay
         setTimeout(() => {
             if (splash && !splash.isDestroyed()) {
