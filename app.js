@@ -76,8 +76,11 @@ createApp({
         }
 
         async function installUpdate() {
+            showToast('Installing update...', 'info');
             flushPersistSync();
-            if (window.electronAPI) window.electronAPI.installUpdate();
+            setTimeout(() => {
+                if (window.electronAPI) window.electronAPI.installUpdate();
+            }, 500);
         }
 
         function checkForUpdates() {
