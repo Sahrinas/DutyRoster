@@ -228,15 +228,14 @@ function setupAutoUpdater() {
     }, 3000);
 }
 
-ipcMain.handle('install-update', async (_event, options) => {
-    console.log('[Updater] install-update invoked', options);
+ipcMain.on('install-update', (_event) => {
+    console.log('[Updater] install-update invoked');
     try {
-        autoUpdater.quitAndInstall(false, true);
-        return { success: true };
+        autoUpdater.quitAndInstall(true, true);
     }
     catch (err) {
         console.error('[Updater] quitAndInstall error', err);
-        return { success: false, message: err?.message || 'Unknown error' };
+        sendToRenderer('update-status', { status: 'error', message: err?.message || 'Ukendt fejl' });
     }
 });
 

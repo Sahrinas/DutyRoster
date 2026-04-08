@@ -127,23 +127,18 @@ createApp({
             return true;
         }
 
-        async function installUpdate() {
-            showToast('Installing update...', 'info');
+        function installUpdate() {
+            if (!window.electronAPI?.installUpdate) {
+                showToast('Installationsfunktion ikke tilgængelig.', 'error');
+                return;
+            }
+            showToast('Genstarter og installerer...', 'info');
             flushPersistSync();
-            setTimeout(async () => {
-                if (!window.electronAPI || !window.electronAPI.installUpdate) {
-                    showToast('Installationsfunktion ikke tilgængelig.', 'error');
-                    return;
-                }
-                const result = await window.electronAPI.installUpdate({ silent: false, force: true });
-                if (!result?.success) {
-                    showToast('Kunne ikke installere opdatering: ' + (result?.message || 'Ukendt fejl'), 'error');
-                }
-            }, 500);
+            setTimeout(() => { window.electronAPI.installUpdate(); }, 300);
         }
 
         function checkForUpdates() {
-            if (!window.electronAPI) {
+            if (!window.electronAPI?.checkForUpdates) {
                 showToast('Opdateringer kan kun tjekkes i app-tilstand', 'error');
                 return;
             }
