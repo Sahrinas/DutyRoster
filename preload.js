@@ -9,4 +9,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     loadData: () => ipcRenderer.invoke('load-data'),
     saveData: (data) => ipcRenderer.invoke('save-data', data),
     saveDataSync: (data) => ipcRenderer.sendSync('save-data-sync', data),
+    setAutoUpdate: (val) => ipcRenderer.send('set-auto-update', val),
 });

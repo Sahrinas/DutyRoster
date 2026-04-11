@@ -1,6 +1,6 @@
-const { ref } = Vue;
+const { ref, watch } = Vue;
 
-export function useUpdater({ showToast, flushPersistSync }) {
+export function useUpdater({ showToast, flushPersistSync, autoUpdate }) {
     const appVersion = ref(null);
     const updateStatus = ref(null);
     const manualUpdateCheck = ref(false);
@@ -24,11 +24,7 @@ export function useUpdater({ showToast, flushPersistSync }) {
     }
 
     function downloadUpdate() {
-        if (!window.electronAPI?.downloadUpdate) {
-            showToast('Downloadfunktion ikke tilg\u00E6ngelig.', 'error');
-            return;
-        }
-
+        if (!window.electronAPI?.downloadUpdate) return;
         window.electronAPI.downloadUpdate();
     }
 
@@ -50,20 +46,36 @@ export function useUpdater({ showToast, flushPersistSync }) {
 
         window.electronAPI.onUpdateStatus((data) => {
             updateStatus.value = data;
+
             if (data.status === 'up-to-date' && manualUpdateCheck.value) {
                 manualUpdateCheck.value = false;
                 showToast('Du har den nyeste version', 'success');
             }
-            if (data.status === 'available' && data.version && data.manual) {
-                showToast(`Version ${data.version} er klar til download`, 'info');
-            }
+
+            // Show toast when update is ready (always, since user may have dismissed the banner)
             if (data.status === 'ready' && data.version) {
-                showToast(`Version ${data.version} er klar til installation`, 'success');
+                const msg = data.requiresRestart
+                    ? `Version ${data.version} er klar \u2014 genstart for at installere`
+                    : `Version ${data.version} installeres ved n\u00E6ste lukning`;
+                showToast(msg, 'success');
             }
+
+            // For manual checks: notify when found
+            if (data.status === 'available' && data.version && data.manual) {
+                showToast(`Version ${data.version} er tilg\u00E6ngelig`, 'info');
+            }
+
             if (['available', 'downloading', 'download-error', 'ready', 'installing', 'error'].includes(data.status)) {
                 manualUpdateCheck.value = false;
             }
         });
+
+        // Sync the autoUpdate setting to main process whenever it changes
+        if (autoUpdate) {
+            watch(autoUpdate, (val) => {
+                window.electronAPI.setAutoUpdate(val);
+            }, { immediate: true });
+        }
     }
 
     return {

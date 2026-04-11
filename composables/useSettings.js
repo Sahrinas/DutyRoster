@@ -13,6 +13,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
         showEmployeeCount: savedSettings.showEmployeeCount ?? defaultSettings.showEmployeeCount,
         showNotePrompts: savedSettings.showNotePrompts ?? defaultSettings.showNotePrompts,
         recurrenceHorizonMonths: savedSettings.recurrenceHorizonMonths ?? defaultSettings.recurrenceHorizonMonths,
+        autoUpdate: savedSettings.autoUpdate ?? defaultSettings.autoUpdate,
     });
 
     const showSetup = ref(false);
@@ -27,6 +28,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
     const slotsPerDay = computed(() => settings.value.slotsPerDay);
     const maxConsecutive = computed(() => settings.value.maxConsecutive);
     const recurrenceHorizonMonths = computed(() => settings.value.recurrenceHorizonMonths);
+    const autoUpdate = computed(() => settings.value.autoUpdate);
 
     watch(() => showSetup.value, (isOpen) => {
         if (!isOpen) return;
@@ -97,6 +99,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
         slotsPerDay,
         maxConsecutive,
         recurrenceHorizonMonths,
+        autoUpdate,
         showSetup,
         setupStep,
         setupConfig,

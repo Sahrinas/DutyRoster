@@ -189,10 +189,12 @@ let mainWindow;
 let splash;
 
 // ===== AUTO UPDATER CONFIG =====
-autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false;
+autoUpdater.autoDownload = false; // we control downloads manually
+autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.logger = console;
 autoUpdater.allowPrerelease = false;
+
+let autoUpdateEnabled = true; // synced from renderer setting
 
 let updateState = {
     status: 'idle',
@@ -237,6 +239,16 @@ function setUpdateState(patch) {
     sendToRenderer('update-status', updateState);
 }
 
+function isMajorOrMinorUpdate(currentVersion, newVersion) {
+    const parse = (v) => (v || '').replace(/[^0-9.]/g, '').split('.').map(Number);
+    const [curMaj, curMin] = parse(currentVersion);
+    const [newMaj, newMin] = parse(newVersion);
+    if (isNaN(curMaj) || isNaN(newMaj)) return true; // unknown → be safe, require restart
+    if (newMaj > curMaj) return true;
+    if (newMaj === curMaj && newMin > curMin) return true;
+    return false; // patch only
+}
+
 function checkForUpdates(manual = false) {
     if (updateCheckInFlight) {
         if (manual) setUpdateState({ manual: true });
@@ -263,23 +275,21 @@ function checkForUpdates(manual = false) {
     });
 }
 
-function downloadUpdate() {
-    if (updateDownloadInFlight || !['available', 'download-error'].includes(updateState.status)) return;
-
+function startDownload(isManual) {
+    if (updateDownloadInFlight) return;
     updateDownloadInFlight = true;
     updateReadyToInstall = false;
     setUpdateState({
         status: 'downloading',
-        manual: true,
+        manual: isManual,
         percent: 0,
         message: null,
     });
-
     autoUpdater.downloadUpdate().catch((err) => {
         updateDownloadInFlight = false;
         setUpdateState({
             status: 'download-error',
-            manual: true,
+            manual: isManual,
             message: err?.message || 'Kunne ikke hente opdateringen',
             percent: null,
         });
@@ -298,13 +308,13 @@ function setupAutoUpdater() {
     autoUpdater.on('update-available', (info) => {
         updateCheckInFlight = false;
         updateReadyToInstall = false;
-        setUpdateState({
-            status: 'available',
-            version: info.version,
-            releaseDate: info.releaseDate,
-            percent: null,
-            message: null,
-        });
+        if (autoUpdateEnabled) {
+            // Silent background download — skip 'available' state entirely
+            setUpdateState({ status: 'downloading', manual: false, percent: 0, version: info.version, message: null });
+            startDownload(false);
+        } else {
+            setUpdateState({ status: 'available', version: info.version, releaseDate: info.releaseDate, percent: null, message: null });
+        }
     });
 
     autoUpdater.on('update-not-available', () => {
@@ -328,11 +338,16 @@ function setupAutoUpdater() {
     autoUpdater.on('update-downloaded', (info) => {
         updateDownloadInFlight = false;
         updateReadyToInstall = true;
+        const requiresRestart = isMajorOrMinorUpdate(app.getVersion(), info.version);
+        if (!requiresRestart) {
+            autoUpdater.autoInstallOnAppQuit = true;
+        }
         setUpdateState({
             status: 'ready',
             version: info.version,
             percent: 100,
             message: null,
+            requiresRestart,
         });
     });
 
@@ -428,7 +443,13 @@ ipcMain.on('check-for-updates', () => {
 });
 
 ipcMain.on('download-update', () => {
-    downloadUpdate();
+    if (['available', 'download-error'].includes(updateState.status)) {
+        startDownload(true);
+    }
+});
+
+ipcMain.on('set-auto-update', (_e, val) => {
+    autoUpdateEnabled = Boolean(val);
 });
 
 // ===== SPLASH SCREEN =====

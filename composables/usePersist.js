@@ -98,10 +98,12 @@ export function usePersist({
     }
 
     function flushPersistSync() {
+        if (!persistEnabled) return true; // not authenticated yet — do not overwrite encrypted data
+
         const snapshotJson = serializeSnapshot(getStateSnapshot());
         queuedPersist = false;
 
-        // Use cached encrypted blob if current, else plaintext fallback
+        // Use cached encrypted blob; fall back to plaintext only if no encrypted blob exists yet
         const blob = lastPersistedBlob ?? snapshotJson;
         lastSnapshotJson = snapshotJson;
 

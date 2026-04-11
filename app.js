@@ -141,6 +141,7 @@ createApp({
         const updaterApi = useUpdater({
             showToast,
             flushPersistSync: persistApi.flushPersistSync,
+            autoUpdate: settingsApi.autoUpdate,
         });
 
         const exportApi = useExport({

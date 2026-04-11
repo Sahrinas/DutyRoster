@@ -14,12 +14,12 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2" fill="var(--accent)"/><rect x="14" y="3" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="3" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="14" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.3"/></svg>
                 <span>Vagtplan</span>
                 <span class="version-label" v-if="appVersion">v{{ appVersion }}</span>
-                <button class="settings-btn" @click="showSettings = true" title="Indstillinger">
+                <button v-if="isUnlocked" class="settings-btn" @click="showSettings = true" title="Indstillinger">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v2M8 13v2M13 8h2M3 8h2M12.5 3.5l-1.5 1.5M4.5 11.5l1.5-1.5M12.5 12.5l-1.5-1.5M4.5 4.5l1.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
                 </button>
                 <button class="update-check-btn" @click="checkForUpdates" title="Tjek for opdateringer">Tjek</button>
             </div>
-            <div class="title-bar-center">
+            <div v-if="isUnlocked" class="title-bar-center">
                 <div class="view-toggle">
                     <button :class="{ active: viewMode === 'week' }" @click="setViewMode('week')">Uge</button>
                     <button :class="{ active: viewMode === 'month' }" @click="setViewMode('month')">Måned</button>
@@ -40,26 +40,32 @@
             </div>
         </div>
 
-        <!-- Update banner -->
+        <!-- Update banner (Discord-style: silent during auto-download, prominent when ready) -->
         <transition name="slide">
-            <div v-if="updateStatus && (['available', 'downloading', 'download-error', 'ready', 'installing', 'error'].includes(updateStatus.status) || manualUpdateCheck)" class="update-bar">
+            <div v-if="updateStatus && (
+                ['ready', 'installing'].includes(updateStatus.status) ||
+                (updateStatus.manual && ['available', 'downloading', 'download-error'].includes(updateStatus.status)) ||
+                (manualUpdateCheck && ['checking', 'error'].includes(updateStatus.status))
+            )" class="update-bar">
                 <div class="update-content">
                     <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2v8M8 2L5 5M8 2l3 3M2 10v2a2 2 0 002 2h8a2 2 0 002-2v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span v-if="updateStatus.status === 'checking'">Checker for opdateringer…</span>
-                    <span v-else-if="updateStatus.status === 'available'">Ny version {{ updateStatus.version }} er tilgængelig</span>
-                    <span v-else-if="updateStatus.status === 'downloading'">Henter opdatering... {{ updateStatus.percent }}%</span>
-                    <span v-else-if="updateStatus.status === 'download-error'">Downloadfejl: {{ updateStatus.message }}</span>
-                    <span v-else-if="updateStatus.status === 'ready'">Version {{ updateStatus.version }} klar til installation</span>
-                    <span v-else-if="updateStatus.status === 'installing'">{{ updateStatus.message }}</span>
+                    <span v-else-if="updateStatus.status === 'available'">Version {{ updateStatus.version }} er tilgængelig</span>
+                    <span v-else-if="updateStatus.status === 'downloading'">Henter opdatering… {{ updateStatus.percent }}%</span>
+                    <span v-else-if="updateStatus.status === 'download-error'">Download fejlede: {{ updateStatus.message }}</span>
+                    <span v-else-if="updateStatus.status === 'ready' && updateStatus.requiresRestart">Vagtplan {{ updateStatus.version }} er klar — genstart for at installere</span>
+                    <span v-else-if="updateStatus.status === 'ready' && !updateStatus.requiresRestart">Vagtplan {{ updateStatus.version }} installeres ved næste lukning</span>
+                    <span v-else-if="updateStatus.status === 'installing'">Installerer opdatering…</span>
                     <span v-else-if="updateStatus.status === 'error'">Opdateringsfejl: {{ updateStatus.message }}</span>
                 </div>
                 <div class="update-actions">
                     <div v-if="updateStatus.status === 'downloading'" class="update-progress">
                         <div class="update-progress-bar" :style="{ width: updateStatus.percent + '%' }"></div>
                     </div>
-                    <button v-if="updateStatus.status === 'available' || updateStatus.status === 'download-error'" class="update-install-btn" @click="downloadUpdate">Hent opdatering</button>
-                    <button v-if="updateStatus.status === 'ready'" class="update-install-btn" @click="installUpdate">Genstart &amp; installer</button>
-                    <button v-if="updateStatus.status === 'available' || updateStatus.status === 'download-error' || updateStatus.status === 'ready' || updateStatus.status === 'error'" class="update-dismiss-btn" @click="dismissUpdateStatus">Luk</button>
+                    <button v-if="updateStatus.status === 'available'" class="update-install-btn" @click="downloadUpdate">Hent</button>
+                    <button v-if="updateStatus.status === 'download-error'" class="update-install-btn" @click="downloadUpdate">Prøv igen</button>
+                    <button v-if="updateStatus.status === 'ready' && updateStatus.requiresRestart" class="update-install-btn" @click="installUpdate">Genstart nu</button>
+                    <button v-if="updateStatus.status !== 'installing'" class="update-dismiss-btn" @click="dismissUpdateStatus">Luk</button>
                 </div>
             </div>
         </transition>
@@ -648,6 +654,13 @@
                                 </label>
                                 <span class="setting-hint">Vis hjælpetekst for noter</span>
                             </div>
+                            <div class="settings-group checkbox">
+                                <label>
+                                    <input type="checkbox" v-model="settings.autoUpdate" />
+                                    <span>Automatiske opdateringer</span>
+                                </label>
+                                <span class="setting-hint">Hent og installer opdateringer automatisk i baggrunden</span>
+                            </div>
                         </div>
                     </div>
 
@@ -656,7 +669,7 @@
                         <div class="settings-about">
                             <p><strong>Vagtplan</strong> v{{ appVersion }}</p>
                             <p>En professionel vagt-planlægningsapp til at organisere arbejdsplanlægning.</p>
-                            <p style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">💾 Data gemmes lokalt på din computer</p>
+                            <p style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border);">💾 Data gemmes lokalt og krypteret på din computer</p>
                             <p style="margin-top: 0.5rem;">📄 Alt understøttelse af import/eksport via CSV</p>
                         </div>
                     </div>

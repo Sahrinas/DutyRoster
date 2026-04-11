@@ -1744,6 +1744,23 @@ main {
     box-shadow: 0 4px 12px rgba(0, 240, 255, 0.2);
 }
 
+.test-update-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    padding: 0.45rem 1rem;
+    border-radius: var(--radius);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    -webkit-app-region: no-drag;
+}
+
+.test-update-btn:hover {
+    color: var(--text);
+    border-color: var(--accent);
+}
+
 .settings-select {
     width: 100%;
     padding: 0.75rem;
