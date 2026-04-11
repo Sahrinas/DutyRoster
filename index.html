@@ -528,6 +528,11 @@
                                 <input id="max-consecutive" type="number" min="1" max="10" v-model.number="settings.maxConsecutive" />
                                 <span class="setting-hint">Maksimalt antal dage i træk uden pause (1-10)</span>
                             </div>
+                            <div class="settings-group">
+                                <label for="recurrence-horizon">Gentagelser fremad (måneder):</label>
+                                <input id="recurrence-horizon" type="number" min="1" max="60" v-model.number="settings.recurrenceHorizonMonths" />
+                                <span class="setting-hint">Hvor mange måneder frem gentagelser gælder (1-60)</span>
+                            </div>
                         </div>
                     </div>
 

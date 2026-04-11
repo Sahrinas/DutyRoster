@@ -95,6 +95,7 @@ createApp({
             monthOffset,
             viewMode,
             slotsPerDay: settingsApi.slotsPerDay,
+            recurrenceHorizonMonths: settingsApi.recurrenceHorizonMonths,
             parseDate: scheduleApi.parseDate,
             getISOWeek: scheduleApi.getISOWeek,
             getAssignedEmployee: assignmentsApi.getAssignedEmployee,

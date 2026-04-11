@@ -12,6 +12,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
         accentColor: savedSettings.accentColor ?? defaultSettings.accentColor,
         showEmployeeCount: savedSettings.showEmployeeCount ?? defaultSettings.showEmployeeCount,
         showNotePrompts: savedSettings.showNotePrompts ?? defaultSettings.showNotePrompts,
+        recurrenceHorizonMonths: savedSettings.recurrenceHorizonMonths ?? defaultSettings.recurrenceHorizonMonths,
     });
 
     const showSetup = ref(false);
@@ -25,6 +26,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
 
     const slotsPerDay = computed(() => settings.value.slotsPerDay);
     const maxConsecutive = computed(() => settings.value.maxConsecutive);
+    const recurrenceHorizonMonths = computed(() => settings.value.recurrenceHorizonMonths);
 
     watch(() => showSetup.value, (isOpen) => {
         if (!isOpen) return;
@@ -47,6 +49,11 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
 
         if (settings.value.maxConsecutive < 1 || settings.value.maxConsecutive > 10) {
             showToast('Maks dage i tr\u00E6k skal v\u00E6re mellem 1 og 10', 'error');
+            return;
+        }
+
+        if (settings.value.recurrenceHorizonMonths < 1 || settings.value.recurrenceHorizonMonths > 60) {
+            showToast('Gentagelseshorisont skal v\u00E6re mellem 1 og 60 m\u00E5neder', 'error');
             return;
         }
 
@@ -89,6 +96,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
         settings,
         slotsPerDay,
         maxConsecutive,
+        recurrenceHorizonMonths,
         showSetup,
         setupStep,
         setupConfig,

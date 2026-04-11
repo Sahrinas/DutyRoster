@@ -22,6 +22,7 @@ export function useRecurrences({
     monthOffset,
     viewMode,
     slotsPerDay,
+    recurrenceHorizonMonths,
     parseDate,
     getISOWeek,
     getAssignedEmployee,
@@ -54,6 +55,9 @@ export function useRecurrences({
                 if (!isRandom && rule.dayOfWeek !== dayIndex) return;
 
                 const start = parseDate(rule.startDate);
+                const horizonEnd = new Date(start.getFullYear(), start.getMonth() + recurrenceHorizonMonths.value, start.getDate());
+                if (date > horizonEnd) return;
+
                 const baseFreq = isRandom ? rule.frequency.replace('random-', '') : rule.frequency;
 
                 const monday = new Date(date);

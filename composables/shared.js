@@ -9,6 +9,7 @@ export const defaultSettings = {
     accentColor: 'cyan',
     showEmployeeCount: true,
     showNotePrompts: true,
+    recurrenceHorizonMonths: 12,
 };
 
 export const dayNames = ['Mandag', 'Tirsdag', 'Onsdag', 'Tordag', 'Fredag', 'L\u00F8rdag', 'S\u00F8ndag'];
