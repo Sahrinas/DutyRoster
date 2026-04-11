@@ -64,7 +64,7 @@
             </div>
         </transition>
 
-        <div class="app-container">
+        <div v-if="isUnlocked" class="app-container">
             <!-- Summary bar -->
             <div class="week-summary">
                 <div
@@ -378,13 +378,41 @@
                 <button :class="{ selected: getRecurrence(recurMenu.dateKey, recurMenu.slotIndex) === 'random-monthly' }" @click="setRecurrence('random-monthly')"><span class="recur-icon">~30</span> Hver måned</button>
                 <button class="recur-remove" @click="setRecurrence(null)">Fjern gentagelse</button>
             </div>
+        </div><!-- end app-container -->
 
-            <!-- Toast notifications -->
+        <!-- Toast notifications -->
             <transition name="toast">
                 <div v-if="toast" class="toast" :class="toast.type">{{ toast.message }}</div>
             </transition>
 
-            <!-- Setup wizard modal -->
+            <!-- Login screen (returning users) -->
+            <div v-if="authReady && !isUnlocked" class="login-overlay">
+                <div class="login-box">
+                    <div class="login-logo">
+                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2" fill="var(--accent)"/><rect x="14" y="3" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="3" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="14" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.3"/></svg>
+                    </div>
+                    <h1 class="login-title">Vagtplan</h1>
+                    <p class="login-subtitle">Indtast din adgangskode for at fortsætte</p>
+                    <div class="login-form">
+                        <input
+                            class="login-input"
+                            type="password"
+                            v-model="loginPassword"
+                            placeholder="Adgangskode"
+                            @keydown.enter="doLogin"
+                            autofocus
+                        />
+                        <p v-if="loginError" class="login-error">{{ loginError }}</p>
+                        <button class="login-btn" @click="doLogin" :disabled="loginLoading">
+                            <span v-if="loginLoading">Låser op…</span>
+                            <span v-else>Lås op</span>
+                        </button>
+                    </div>
+                    <p class="login-hint">Din adgangskode krypterer alle data</p>
+                </div>
+            </div>
+
+            <!-- Setup wizard modal (first-time users only) -->
             <div v-if="showSetup" class="setup-modal-overlay"></div>
             <div v-if="showSetup" class="setup-modal">
                 <!-- Step 1: Welcome -->
@@ -415,12 +443,45 @@
                     </div>
                 </div>
 
-                <!-- Step 2: Basic Configuration -->
+                <!-- Step 2: Create Password -->
                 <div v-if="setupStep === 2" class="setup-step">
+                    <div class="setup-step-header">
+                        <h2>Opret Adgangskode</h2>
+                        <div class="setup-progress">
+                            <div class="progress-bar" :style="{ width: (setupStep / 5) * 100 + '%' }"></div>
+                        </div>
+                    </div>
+                    <div class="setup-step-content">
+                        <div class="setup-password-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none"><rect x="5" y="11" width="14" height="10" rx="2" stroke="var(--accent)" stroke-width="1.5"/><path d="M8 11V7a4 4 0 018 0v4" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round"/><circle cx="12" cy="16" r="1.5" fill="var(--accent)"/></svg>
+                        </div>
+                        <p class="setup-hint" style="text-align:center;margin-bottom:1.5rem;">Din adgangskode bruges til at kryptere alle dine data. Den kan ikke nulstilles — opbevar den sikkert.</p>
+                        <div class="setup-form-group" v-if="!isUnlocked">
+                            <label>Adgangskode:</label>
+                            <input type="password" class="setup-password-input" v-model="setupPassword" placeholder="Mindst 8 tegn" @keydown.enter="nextSetupStep" />
+                        </div>
+                        <div class="setup-form-group" v-if="!isUnlocked">
+                            <label>Bekræft adgangskode:</label>
+                            <input type="password" class="setup-password-input" v-model="setupPasswordConfirm" placeholder="Gentag adgangskode" @keydown.enter="nextSetupStep" />
+                        </div>
+                        <p v-if="setupPasswordError" class="setup-password-error">{{ setupPasswordError }}</p>
+                        <p v-if="isUnlocked" class="setup-password-ok">Adgangskode oprettet</p>
+                    </div>
+                    <div class="setup-actions">
+                        <button class="setup-prev-btn" @click="prevSetupStep">Tilbage</button>
+                        <button class="setup-next-btn" @click="nextSetupStep" :disabled="setupPasswordLoading">
+                            <span v-if="setupPasswordLoading">Opretter…</span>
+                            <span v-else>Næste</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Step 3: Basic Configuration -->
+                <div v-if="setupStep === 3" class="setup-step">
                     <div class="setup-step-header">
                         <h2>Grundlæggende Opsætning</h2>
                         <div class="setup-progress">
-                            <div class="progress-bar" :style="{ width: (setupStep / 4) * 100 + '%' }"></div>
+                            <div class="progress-bar" :style="{ width: (setupStep / 5) * 100 + '%' }"></div>
                         </div>
                     </div>
                     <div class="setup-step-content">
@@ -447,12 +508,12 @@
                     </div>
                 </div>
 
-                <!-- Step 3: Active Days -->
-                <div v-if="setupStep === 3" class="setup-step">
+                <!-- Step 4: Active Days -->
+                <div v-if="setupStep === 4" class="setup-step">
                     <div class="setup-step-header">
                         <h2>Arbejdsdage</h2>
                         <div class="setup-progress">
-                            <div class="progress-bar" :style="{ width: (setupStep / 4) * 100 + '%' }"></div>
+                            <div class="progress-bar" :style="{ width: (setupStep / 5) * 100 + '%' }"></div>
                         </div>
                     </div>
                     <div class="setup-step-content">
@@ -469,12 +530,12 @@
                     </div>
                 </div>
 
-                <!-- Step 4: Tutorial/Quick Start -->
-                <div v-if="setupStep === 4" class="setup-step">
+                <!-- Step 5: Tutorial/Quick Start -->
+                <div v-if="setupStep === 5" class="setup-step">
                     <div class="setup-step-header">
                         <h2>Hurtig Intro</h2>
                         <div class="setup-progress">
-                            <div class="progress-bar" :style="{ width: (setupStep / 4) * 100 + '%' }"></div>
+                            <div class="progress-bar" :style="{ width: (setupStep / 5) * 100 + '%' }"></div>
                         </div>
                     </div>
                     <div class="setup-step-content">
@@ -491,10 +552,10 @@
                         <div class="tutorial-card">
                             <h3>Vigtige Tips:</h3>
                             <ul class="tutorial-tips">
-                                <li>⚡ Ctrl+Z for at fortryde seneste ændring</li>
-                                <li>📋 Auto-fill udfylder automatisk alle slots baseret på duty count</li>
-                                <li>🔄 Skift mellem uge- og månedsvisning øverst</li>
-                                <li>💾 Alt gemmes automatisk til din computer</li>
+                                <li>Ctrl+Z for at fortryde seneste ændring</li>
+                                <li>Auto-fill udfylder automatisk alle slots baseret på duty count</li>
+                                <li>Skift mellem uge- og månedsvisning øverst</li>
+                                <li>Alt gemmes automatisk og krypteret til din computer</li>
                             </ul>
                         </div>
                     </div>
@@ -604,7 +665,6 @@
                     <button class="settings-save-btn" @click="saveSettings">Gem Indstillinger</button>
                 </div>
             </div>
-        </div>
     </div>
 
     <script src="vue.global.prod.js"></script>

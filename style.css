@@ -1142,6 +1142,109 @@ main {
     background: var(--red-dim);
 }
 
+/* ===== LOGIN SCREEN ===== */
+.login-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 300;
+}
+
+.login-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    width: 340px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.4);
+}
+
+.login-logo {
+    margin-bottom: 0.25rem;
+}
+
+.login-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--text);
+    margin: 0;
+}
+
+.login-subtitle {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    text-align: center;
+    margin: 0 0 0.5rem;
+}
+
+.login-form {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.login-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 1rem;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.login-input:focus {
+    border-color: var(--accent);
+}
+
+.login-error {
+    color: var(--red, #e05252);
+    font-size: 0.82rem;
+    margin: 0;
+    text-align: center;
+}
+
+.login-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, opacity 0.15s;
+}
+
+.login-btn:hover:not(:disabled) {
+    background: var(--accent-hover);
+}
+
+.login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.login-hint {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin: 0.25rem 0 0;
+    text-align: center;
+    opacity: 0.7;
+}
+
 /* ===== SETUP WIZARD MODAL ===== */
 .setup-modal-overlay {
     position: fixed;
@@ -1451,6 +1554,46 @@ main {
 .setup-finish-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(0, 240, 255, 0.3);
+}
+
+/* ===== SETUP PASSWORD STEP ===== */
+.setup-password-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.setup-password-input {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--input-bg, var(--bg-0));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 1rem;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s;
+    margin-top: 0.4rem;
+}
+
+.setup-password-input:focus {
+    border-color: var(--accent);
+}
+
+.setup-password-error {
+    color: var(--red, #e05252);
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0;
+    text-align: center;
+}
+
+.setup-password-ok {
+    color: var(--accent);
+    font-size: 0.9rem;
+    text-align: center;
+    font-weight: 600;
+    margin: 0.5rem 0 0;
 }
 
 /* ===== SETTINGS MODAL ===== */

@@ -64,7 +64,7 @@ export function useSettings({ saved, activeDays, persist, showToast }) {
     }
 
     function nextSetupStep() {
-        if (setupStep.value < 4) setupStep.value++;
+        if (setupStep.value < 5) setupStep.value++;
     }
 
     function prevSetupStep() {

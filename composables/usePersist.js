@@ -14,11 +14,15 @@ export function usePersist({
     notes,
     standby,
     settings,
+    cryptoKey,
+    encryptFn,
+    decryptFn,
 }) {
     const dataReady = ref(false);
 
     let persistEnabled = false;
     let lastSnapshotJson = '';
+    let lastPersistedBlob = null; // cached for sync flush
     let saveInFlight = false;
     let queuedPersist = false;
 
@@ -57,12 +61,22 @@ export function usePersist({
         }
     }
 
-    function persist(snapshotJson = serializeSnapshot(getStateSnapshot())) {
+    async function buildEncryptedBlob(snapshotJson) {
+        if (!cryptoKey.value) return snapshotJson; // fallback (no key yet)
+        const encrypted = await encryptFn(cryptoKey.value, snapshotJson);
+        return { __encrypted: true, data: encrypted };
+    }
+
+    async function persist(snapshotJson) {
         if (!persistEnabled) return;
         if (snapshotJson === lastSnapshotJson) return;
-
         lastSnapshotJson = snapshotJson;
-        localStorage.setItem(STORAGE_KEY, snapshotJson);
+
+        const blob = await buildEncryptedBlob(snapshotJson);
+        lastPersistedBlob = blob;
+
+        const blobStr = typeof blob === 'string' ? blob : JSON.stringify(blob);
+        localStorage.setItem(STORAGE_KEY, blobStr);
 
         if (!window.electronAPI?.saveData) return;
         if (saveInFlight) {
@@ -71,8 +85,7 @@ export function usePersist({
         }
 
         saveInFlight = true;
-        const data = JSON.parse(snapshotJson);
-        window.electronAPI.saveData(data)
+        window.electronAPI.saveData(blob)
             .catch((error) => {
                 console.error('[Storage] Async save failed:', error);
             })
@@ -85,15 +98,36 @@ export function usePersist({
     }
 
     function flushPersistSync() {
-        const data = getStateSnapshot();
-        const snapshotJson = serializeSnapshot(data);
-        lastSnapshotJson = snapshotJson;
+        const snapshotJson = serializeSnapshot(getStateSnapshot());
         queuedPersist = false;
-        localStorage.setItem(STORAGE_KEY, snapshotJson);
+
+        // Use cached encrypted blob if current, else plaintext fallback
+        const blob = lastPersistedBlob ?? snapshotJson;
+        lastSnapshotJson = snapshotJson;
+
+        const blobStr = typeof blob === 'string' ? blob : JSON.stringify(blob);
+        localStorage.setItem(STORAGE_KEY, blobStr);
+
         if (window.electronAPI?.saveDataSync) {
-            return window.electronAPI.saveDataSync(data);
+            return window.electronAPI.saveDataSync(blob);
         }
         return true;
+    }
+
+    async function decryptBlob(raw, key) {
+        if (!raw) return null;
+        if (raw.__encrypted && raw.data && key) {
+            try {
+                const plainJson = await decryptFn(key, raw.data);
+                return JSON.parse(plainJson);
+            } catch (e) {
+                console.error('[Storage] Decryption failed:', e);
+                return null;
+            }
+        }
+        // Legacy plaintext object
+        if (raw.__encrypted) return null; // encrypted but no key — can't decrypt
+        return raw;
     }
 
     const stateSnapshotJson = computed(() => serializeSnapshot(getStateSnapshot()));
@@ -101,33 +135,39 @@ export function usePersist({
         persist(snapshotJson);
     });
 
-    function initializePersistence() {
+    async function initializePersistence(decryptedSaved) {
         if (window.electronAPI?.loadData) {
-            window.electronAPI.loadData().then((result) => {
-                const fileData = result?.data || result;
-                const fileSource = result?.source || 'primary';
-                const shouldMigrateLocal =
-                    fileSource === 'default' &&
-                    hasMeaningfulData(saved) &&
-                    !hasMeaningfulData(fileData);
+            const result = await window.electronAPI.loadData();
+            const fileDataRaw = result?.data || result;
+            const fileSource = result?.source || 'primary';
 
-                if (shouldMigrateLocal) {
-                    applyData(saved);
-                } else if (fileData) {
-                    applyData(fileData);
-                }
+            const fileData = await decryptBlob(fileDataRaw, cryptoKey.value);
 
-                lastSnapshotJson = serializeSnapshot(getStateSnapshot());
-                dataReady.value = true;
-                nextTick(() => {
-                    persistEnabled = true;
-                    if (shouldMigrateLocal) flushPersistSync();
-                    else persist(stateSnapshotJson.value);
-                });
+            const shouldMigrateLocal =
+                fileSource === 'default' &&
+                hasMeaningfulData(decryptedSaved) &&
+                !hasMeaningfulData(fileData);
+
+            if (shouldMigrateLocal) {
+                applyData(decryptedSaved);
+            } else if (fileData) {
+                applyData(fileData);
+            }
+
+            lastSnapshotJson = serializeSnapshot(getStateSnapshot());
+            dataReady.value = true;
+            nextTick(() => {
+                persistEnabled = true;
+                if (shouldMigrateLocal) flushPersistSync();
+                else persist(stateSnapshotJson.value);
             });
             return;
         }
 
+        // No Electron — use decrypted localStorage data
+        if (decryptedSaved && hasMeaningfulData(decryptedSaved)) {
+            applyData(decryptedSaved);
+        }
         lastSnapshotJson = serializeSnapshot(getStateSnapshot());
         dataReady.value = true;
         persistEnabled = true;

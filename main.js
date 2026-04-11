@@ -110,30 +110,40 @@ function migrateLegacyDataIfNeeded() {
     }
 }
 
+function isEncryptedBlob(data) {
+    return data && data.__encrypted === true && typeof data.data === 'string';
+}
+
+function loadFileData(filePath) {
+    const raw = readJsonFile(filePath);
+    if (isEncryptedBlob(raw)) return raw; // pass through encrypted blob as-is
+    return normalizeData(raw);
+}
+
 function loadData() {
     migrateLegacyDataIfNeeded();
     try {
-        const normalized = normalizeData(readJsonFile(dataPath));
-        lastKnownData = normalized;
-        return { data: normalized, source: 'primary' };
+        const data = loadFileData(dataPath);
+        lastKnownData = data;
+        return { data, source: 'primary' };
     }
     catch {
         try {
             if (fs.existsSync(tempDataPath)) {
                 console.warn('[Storage] Recovering from temporary data file');
-                const normalized = normalizeData(readJsonFile(tempDataPath));
-                writeDataFiles(JSON.stringify(normalized, null, 2));
-                lastKnownData = normalized;
-                return { data: normalized, source: 'temp' };
+                const data = loadFileData(tempDataPath);
+                writeDataFiles(JSON.stringify(data, null, 2));
+                lastKnownData = data;
+                return { data, source: 'temp' };
             }
         }
         catch {}
         try {
             console.warn('[Storage] Primary data file missing or unreadable, trying backup');
-            const normalized = normalizeData(readJsonFile(backupDataPath));
-            writeDataFiles(JSON.stringify(normalized, null, 2));
-            lastKnownData = normalized;
-            return { data: normalized, source: 'backup' };
+            const data = loadFileData(backupDataPath);
+            writeDataFiles(JSON.stringify(data, null, 2));
+            lastKnownData = data;
+            return { data, source: 'backup' };
         }
         catch {
             const fallback = cloneDefaultState();
@@ -146,9 +156,14 @@ function loadData() {
 
 function saveData(data) {
     try {
-        const normalized = normalizeData(data);
-        const serialized = JSON.stringify(normalized, null, 2);
-        lastKnownData = normalized;
+        let toSave;
+        if (isEncryptedBlob(data)) {
+            toSave = data; // store encrypted blob as-is
+        } else {
+            toSave = normalizeData(data); // legacy plaintext
+        }
+        const serialized = JSON.stringify(toSave, null, 2);
+        lastKnownData = toSave;
         writeDataFiles(serialized);
         return true;
     }

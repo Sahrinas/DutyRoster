@@ -1,6 +1,7 @@
-const { createApp, ref, watch } = Vue;
+const { createApp, ref, computed, watch } = Vue;
 
 import { loadSavedSync, hasMeaningfulData, SETUP_SHOWN_KEY, toggleDayInArray } from './composables/shared.js';
+import { isAuthSetup, createAuthKey, unlockAuthKey, encryptData, decryptData } from './composables/useAuth.js';
 import { useSettings } from './composables/useSettings.js';
 import { useSchedule } from './composables/useSchedule.js';
 import { usePersist } from './composables/usePersist.js';
@@ -12,17 +13,34 @@ import { useExport } from './composables/useExport.js';
 
 createApp({
     setup() {
-        const saved = loadSavedSync();
+        const rawSaved = loadSavedSync();
 
-        const employees = ref(saved.employees || []);
-        const activeDays = ref(Array.isArray(saved.activeDays) ? saved.activeDays : [0, 1, 2, 3, 4]);
-        const weekOffset = ref(saved.weekOffset || 0);
-        const monthOffset = ref(saved.monthOffset || 0);
-        const viewMode = ref(saved.viewMode || 'week');
-        const assignments = ref(saved.assignments || {});
-        const recurrences = ref(saved.recurrences || []);
-        const notes = ref(saved.notes || {});
-        const standby = ref(saved.standby || []);
+        // Auth state
+        const authReady = isAuthSetup();
+        const cryptoKey = ref(null);
+        const isUnlocked = ref(false);
+
+        // Login screen state
+        const loginPassword = ref('');
+        const loginError = ref('');
+        const loginLoading = ref(false);
+
+        // Setup password step state
+        const setupPassword = ref('');
+        const setupPasswordConfirm = ref('');
+        const setupPasswordError = ref('');
+        const setupPasswordLoading = ref(false);
+
+        // Always start with defaults — data applied after auth via initializePersistence
+        const employees = ref([]);
+        const activeDays = ref([0, 1, 2, 3, 4]);
+        const weekOffset = ref(0);
+        const monthOffset = ref(0);
+        const viewMode = ref('week');
+        const assignments = ref({});
+        const recurrences = ref([]);
+        const notes = ref({});
+        const standby = ref([]);
         const dragState = ref(null);
         const searchQuery = ref('');
         const toast = ref(null);
@@ -38,8 +56,9 @@ createApp({
 
         let persistApi;
 
+        // Pass empty saved so settings start from defaults; applyData fills them after auth
         const settingsApi = useSettings({
-            saved,
+            saved: {},
             activeDays,
             persist: () => persistApi?.persist(),
             showToast,
@@ -103,7 +122,7 @@ createApp({
         });
 
         persistApi = usePersist({
-            saved,
+            saved: {},
             employees,
             activeDays,
             weekOffset,
@@ -114,6 +133,9 @@ createApp({
             notes,
             standby,
             settings: settingsApi.settings,
+            cryptoKey,
+            encryptFn: encryptData,
+            decryptFn: decryptData,
         });
 
         const updaterApi = useUpdater({
@@ -139,9 +161,73 @@ createApp({
             showToast,
         });
 
-        persistApi.initializePersistence();
+        // Decrypt the raw localStorage blob and initialize persistence
+        async function initAfterAuth(key, decryptedSaved) {
+            cryptoKey.value = key;
+            isUnlocked.value = true;
+            await persistApi.initializePersistence(decryptedSaved);
+        }
 
-        if (!localStorage.getItem(SETUP_SHOWN_KEY) && !hasMeaningfulData(saved)) {
+        async function decryptSaved(key) {
+            if (!rawSaved || !rawSaved.__encrypted) return rawSaved || null;
+            try {
+                const plain = await decryptData(key, rawSaved.data);
+                return JSON.parse(plain);
+            } catch {
+                return null;
+            }
+        }
+
+        // Login handler (returning users)
+        async function doLogin() {
+            if (!loginPassword.value) return;
+            loginLoading.value = true;
+            loginError.value = '';
+            const key = await unlockAuthKey(loginPassword.value);
+            if (!key) {
+                loginLoading.value = false;
+                loginError.value = 'Forkert adgangskode';
+                return;
+            }
+            const decrypted = await decryptSaved(key);
+            loginLoading.value = false;
+            await initAfterAuth(key, decrypted);
+        }
+
+        // Password creation handler — called from setup step 2
+        async function completePasswordStep() {
+            // If already unlocked (e.g. user navigated back), just advance
+            if (isUnlocked.value) {
+                settingsApi.setupStep.value++;
+                return;
+            }
+            if (setupPassword.value.length < 8) {
+                setupPasswordError.value = 'Adgangskode skal v\u00E6re mindst 8 tegn';
+                return;
+            }
+            if (setupPassword.value !== setupPasswordConfirm.value) {
+                setupPasswordError.value = 'Adgangskoderne matcher ikke';
+                return;
+            }
+            setupPasswordLoading.value = true;
+            setupPasswordError.value = '';
+            const key = await createAuthKey(setupPassword.value);
+            setupPasswordLoading.value = false;
+            settingsApi.setupStep.value++;
+            await initAfterAuth(key, null);
+        }
+
+        // Override nextSetupStep: step 2 triggers password creation
+        async function nextSetupStep() {
+            if (settingsApi.setupStep.value === 2) {
+                await completePasswordStep();
+                return;
+            }
+            settingsApi.nextSetupStep();
+        }
+
+        // Show setup for first-time users (no auth set up), login for returning users
+        if (!authReady) {
             settingsApi.showSetup.value = true;
         }
 
@@ -184,7 +270,10 @@ createApp({
                 if (event.key === 'Escape') {
                     if (recurrenceApi.recurMenu.value) recurrenceApi.recurMenu.value = null;
                     else if (settingsApi.showSettings.value) settingsApi.showSettings.value = false;
-                    else if (settingsApi.showSetup.value) settingsApi.showSetup.value = false;
+                }
+
+                if (event.key === 'Enter' && authReady && !isUnlocked.value) {
+                    doLogin();
                 }
             });
 
@@ -217,6 +306,18 @@ createApp({
             toast,
             dataReady: persistApi.dataReady,
             toggleDay,
+            // Auth
+            authReady,
+            isUnlocked,
+            loginPassword,
+            loginError,
+            loginLoading,
+            doLogin,
+            setupPassword,
+            setupPasswordConfirm,
+            setupPasswordError,
+            setupPasswordLoading,
+            nextSetupStep, // overrides settingsApi.nextSetupStep
         };
     },
 }).mount('#app');
