@@ -14,8 +14,8 @@
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2" fill="var(--accent)"/><rect x="14" y="3" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="3" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.5"/><rect x="14" y="14" width="7" height="7" rx="2" fill="var(--accent)" opacity="0.3"/></svg>
                 <span>Vagtplan</span>
                 <span class="version-label" v-if="appVersion">v{{ appVersion }}</span>
-                <button v-if="isUnlocked" class="settings-btn" @click="showSettings = true" title="Indstillinger">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 1v2M8 13v2M13 8h2M3 8h2M12.5 3.5l-1.5 1.5M4.5 11.5l1.5-1.5M12.5 12.5l-1.5-1.5M4.5 4.5l1.5 1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.2"/></svg>
+                <button v-if="isUnlocked" class="settings-btn" @click="showSettings = true" title="Indstillinger" :class="{ 'tutorial-target': showTutorial && currentTutorialStep.target === 'tutorial-settings-btn' }">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 1v2M8 13v2M13 8h2M3 8h2M12.5 3.5l-1.5 1.5M4.5 11.5l1.5-1.5M12.5 12.5l-1.5-1.5M4.5 4.5l1.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="2" stroke="currentColor" stroke-width="1.4"/></svg>
                 </button>
                 <button class="update-check-btn" @click="checkForUpdates" title="Tjek for opdateringer">Tjek</button>
             </div>
@@ -99,14 +99,14 @@
                         <div
                             v-for="entry in standbyList"
                             :key="'sb-' + entry.empId"
-                            :class="['standby-chip', colorClass(entry.empId)]"
+                            :class="['standby-chip', colorClass(getStandbyEmployee(entry.empId))]"
                             draggable="true"
                             @dragstart="onDragStartFromStandby($event, entry.empId)"
                             @dragend="dragState = null"
                         >
                             <div class="standby-chip-header">
                                 <span class="standby-name">{{ getStandbyEmployee(entry.empId)?.name }}</span>
-                                <button class="activate-btn" @click="activateFromStandby(entry.empId)" title="Aktiver medic">
+                                <button class="activate-btn" @click="activateFromStandby(entry.empId)" :title="'Aktiver ' + settings.employeeLabel.toLowerCase()">
                                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
                                 </button>
                             </div>
@@ -116,26 +116,27 @@
                                 @input="updateStandbyComment(entry.empId, $event.target.value)"
                                 placeholder="Årsag..."
                                 rows="2"
+                                draggable="false"
                             ></textarea>
                         </div>
                         <div v-if="standbyList.length === 0" class="empty-state">
                             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" opacity="0.3"><rect x="4" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>
-                            <span>Træk medic hertil</span>
+                            <span>Træk {{ settings.employeeLabel.toLowerCase() }} hertil</span>
                         </div>
                     </div>
                 </section>
 
-                <section class="panel employee-pool">
+                <section :class="['panel', 'employee-pool', { 'tutorial-target': showTutorial && currentTutorialStep.target === 'tutorial-employee-pool' }]">
                     <div class="panel-header">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 14.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        <h2>Medics</h2>
+                        <h2>{{ settings.employeeLabel }}s</h2>
                         <span class="badge">{{ filteredEmployees.length }}</span>
                     </div>
-                    <div class="add-employee">
+                    <div :class="['add-employee', { 'tutorial-target': showTutorial && currentTutorialStep.target === 'tutorial-employee-input' }]">
                         <input
                             v-model="newEmployeeName"
                             @keydown.enter="addEmployee"
-                            placeholder="Tilføj ny medic..."
+                            :placeholder="'Tilføj ny ' + settings.employeeLabel.toLowerCase() + '...'"
                         >
                         <button @click="addEmployee" class="add-btn" title="Tilføj">
                             <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -144,16 +145,16 @@
 
                     <div v-if="employees.length > 1" class="search-box">
                         <svg class="search-icon" width="13" height="13" viewBox="0 0 16 16" fill="none"><circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" stroke-width="1.5"/><path d="M10 10l4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        <input v-model="searchQuery" placeholder="Søg medic..." class="search-input">
+                        <input v-model="searchQuery" :placeholder="'Søg ' + settings.employeeLabel.toLowerCase() + '...'" class="search-input">
                     </div>
 
                     <div class="employee-list" @dragover.prevent @drop="onDropToPool">
                         <div
                             v-for="emp in filteredEmployees"
                             :key="emp.id"
-                            :class="['employee-chip', colorClass(emp.id)]"
-                            draggable="true"
-                            @dragstart="onDragStartFromPool($event, emp.id)"
+                            :class="['employee-chip', colorClass(emp)]"
+                            :draggable="editingEmpId !== emp.id"
+                            @dragstart="editingEmpId !== emp.id && onDragStartFromPool($event, emp.id)"
                             @dragend="dragState = null"
                         >
                             <div class="chip-info">
@@ -161,11 +162,13 @@
                                     <input class="rename-input" v-model="editingEmpName"
                                         @keydown.enter.stop="confirmRename"
                                         @keydown.escape.stop="cancelRename"
-                                        @blur="confirmRename" />
+                                        @blur="confirmRename"
+                                        @mousedown.stop
+                                        draggable="false" />
                                 </template>
                                 <template v-else>
                                     <span class="chip-name">{{ emp.name }}</span>
-                                    <div class="duty-counts">
+                                    <div v-if="settings.showEmployeeCount" class="duty-counts">
                                         <span
                                             v-for="mc in getMonthlyStats(emp.id)"
                                             :key="mc.key"
@@ -176,6 +179,7 @@
                                 </template>
                             </div>
                             <div class="chip-actions">
+                                <button class="chip-action-btn color-dot-btn" :class="colorClass(emp)" @click.stop="updateEmployeeColor(emp.id)" title="Skift farve"></button>
                                 <button class="chip-action-btn rename-btn" @click.stop="startRename(emp)" title="Omdøb">
                                     <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M11 2l3 3-9 9H2v-3L11 2z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                                 </button>
@@ -189,7 +193,7 @@
                         </div>
                         <div v-if="employees.length === 0" class="empty-state">
                             <svg width="20" height="20" viewBox="0 0 16 16" fill="none" opacity="0.3"><circle cx="8" cy="5" r="3" stroke="currentColor" stroke-width="1.5"/><path d="M2.5 14.5c0-3 2.5-5 5.5-5s5.5 2 5.5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                            <span>Tilføj medics ovenfor</span>
+                            <span>Tilføj {{ settings.employeeLabel.toLowerCase() }}s ovenfor</span>
                         </div>
                         <div v-else-if="filteredEmployees.length === 0" class="empty-state">
                             <span>Ingen resultater</span>
@@ -198,7 +202,7 @@
                 </section>
               </div>
 
-                <section class="roster">
+                <section :class="['roster', { 'tutorial-target': showTutorial && currentTutorialStep.target === 'tutorial-roster' }]">
                     <div class="day-toggles">
                         <span class="toggles-label">Aktive dage</span>
                         <button
@@ -209,7 +213,7 @@
                         >{{ day.slice(0, 3) }}</button>
                     </div>
 
-                    <div class="toolbar">
+                    <div :class="['toolbar', { 'tutorial-target': showTutorial && currentTutorialStep.target === 'tutorial-toolbar' }]">
                         <div class="toolbar-group">
                             <button class="toolbar-btn" @click="exportImage" title="Eksporter som billede">
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 11v3h12v-3M8 2v8M8 10L4.5 6.5M8 10l3.5-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -227,7 +231,7 @@
                         </div>
                         <div class="toolbar-divider"></div>
                         <div class="toolbar-group">
-                            <button class="toolbar-btn accent" @click="autoFill" title="Auto-fordel medics">
+                            <button class="toolbar-btn accent" @click="autoFill" :title="'Auto-fordel ' + settings.employeeLabel.toLowerCase() + 's'">
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
                                 <span>Auto-fyld</span>
                             </button>
@@ -281,8 +285,8 @@
                                     </div>
                                     <div class="day-card-slots">
                                         <template v-for="s in slotsPerDay" :key="s">
-                                            <div class="slot-label">Slot {{ s }}</div>
-                                            <div v-if="getAssignedEmployee(dayInfo.dateKey, s - 1)" :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1).id)]" draggable="true" @dragstart="onDragStartFromSlot($event, getAssignedEmployee(dayInfo.dateKey, s - 1).id, dayInfo.dateKey, s - 1)" @dragend="dragState = null" @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)" @dragleave="slotDragOver = null" @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)">
+                                            <div class="slot-label">{{ settings.slotNames[s - 1] ?? 'Slot ' + s }}</div>
+                                            <div v-if="getAssignedEmployee(dayInfo.dateKey, s - 1)" :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1))]" draggable="true" @dragstart="onDragStartFromSlot($event, getAssignedEmployee(dayInfo.dateKey, s - 1).id, dayInfo.dateKey, s - 1)" @dragend="dragState = null" @dragover.prevent="slotDragOver = dayInfo.dateKey + '-' + (s - 1)" @dragleave="slotDragOver = null" @drop="onDropToSlot($event, dayInfo.dateKey, s - 1)">
                                                 <div class="slot-content">
                                                     <span>{{ getAssignedEmployee(dayInfo.dateKey, s - 1).name }}</span>
                                                     <span v-if="getRecurrence(dayInfo.dateKey, s - 1)" class="recur-badge" :title="getRecurrenceLabel(getRecurrence(dayInfo.dateKey, s - 1))">{{ getRecurrenceShort(getRecurrence(dayInfo.dateKey, s - 1)) }}</span>
@@ -297,8 +301,8 @@
                                             </div>
                                         </template>
                                     </div>
-                                    <div class="day-notes">
-                                        <input :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Note..." class="note-input">
+                                    <div v-show="settings.showNotePrompts || getNote(dayInfo.dateKey)" class="day-notes">
+                                        <textarea :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Note..." class="note-input"></textarea>
                                     </div>
                                 </div>
                             </div>
@@ -307,7 +311,7 @@
                     </template>
 
                     <!-- Week view -->
-                    <div v-else class="roster-grid">
+                    <div v-else class="roster-grid" :style="{ gridTemplateColumns: 'repeat(' + activeDays.length + ', minmax(0, 1fr))' }">
                         <div
                             v-for="dayInfo in visibleDays"
                             :key="dayInfo.dateKey"
@@ -326,10 +330,10 @@
                             </div>
                             <div class="day-card-slots">
                                 <template v-for="s in slotsPerDay" :key="s">
-                                    <div class="slot-label">Vagt {{ s }}</div>
+                                    <div class="slot-label">{{ settings.slotNames[s - 1] ?? 'Vagt ' + s }}</div>
                                     <div
                                         v-if="getAssignedEmployee(dayInfo.dateKey, s - 1)"
-                                        :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1).id)]"
+                                        :class="['slot', 'filled', colorClass(getAssignedEmployee(dayInfo.dateKey, s - 1))]"
                                         draggable="true"
                                         @dragstart="onDragStartFromSlot($event, getAssignedEmployee(dayInfo.dateKey, s - 1).id, dayInfo.dateKey, s - 1)"
                                         @dragend="dragState = null"
@@ -361,8 +365,8 @@
                                     </div>
                                 </template>
                             </div>
-                            <div class="day-notes">
-                                <input :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Tilføj note..." class="note-input">
+                            <div v-show="settings.showNotePrompts || getNote(dayInfo.dateKey)" class="day-notes">
+                                <textarea :value="getNote(dayInfo.dateKey)" @input="setNote(dayInfo.dateKey, $event.target.value)" placeholder="Tilføj note..." class="note-input"></textarea>
                             </div>
                         </div>
                     </div>
@@ -507,6 +511,17 @@
                             </div>
                             <p class="setup-hint">Maksimalt antal dage uden pause</p>
                         </div>
+                        <div class="setup-form-group">
+                            <label>Betegnelse for medarbejdergruppe:</label>
+                            <input
+                                type="text"
+                                class="setup-password-input"
+                                v-model="setupConfig.employeeLabel"
+                                placeholder="Medic"
+                                @keydown.enter="nextSetupStep"
+                            />
+                            <p class="setup-hint">Bruges som label i grænsefladen (f.eks. "Medic", "Plejer", "Vagt")</p>
+                        </div>
                     </div>
                     <div class="setup-actions">
                         <button class="setup-prev-btn" @click="prevSetupStep">Tilbage</button>
@@ -536,38 +551,35 @@
                     </div>
                 </div>
 
-                <!-- Step 5: Tutorial/Quick Start -->
+                <!-- Step 5: Guide or Skip -->
                 <div v-if="setupStep === 5" class="setup-step">
                     <div class="setup-step-header">
-                        <h2>Hurtig Intro</h2>
+                        <h2>Klar til start!</h2>
                         <div class="setup-progress">
-                            <div class="progress-bar" :style="{ width: (setupStep / 5) * 100 + '%' }"></div>
+                            <div class="progress-bar" style="width: 100%"></div>
                         </div>
                     </div>
                     <div class="setup-step-content">
-                        <div class="tutorial-card">
-                            <h3>Sådan bruger du Vagtplan:</h3>
-                            <ol class="tutorial-list">
-                                <li><strong>Tilføj medarbejdere:</strong> Klik på input feltet og type navn, tryk Enter</li>
-                                <li><strong>Tildel vagter:</strong> Drag medarbejdere fra siden til en vagt-slot</li>
-                                <li><strong>Sæt faste vagter:</strong> Højreklik på en tildeling for recurrence menu</li>
-                                <li><strong>Eksporter:</strong> Brug knapperne i værktøjslinjen for billede eller CSV</li>
-                                <li><strong>Indstillinger:</strong> Klik gear-ikonet for flere muligheder</li>
-                            </ol>
+                        <div class="setup-logo">
+                            <svg width="56" height="56" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="var(--accent)" stroke-width="1.5"/><path d="M12 8v4l3 3" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </div>
-                        <div class="tutorial-card">
-                            <h3>Vigtige Tips:</h3>
-                            <ul class="tutorial-tips">
-                                <li>Ctrl+Z for at fortryde seneste ændring</li>
-                                <li>Auto-fill udfylder automatisk alle slots baseret på duty count</li>
-                                <li>Skift mellem uge- og månedsvisning øverst</li>
-                                <li>Alt gemmes automatisk og krypteret til din computer</li>
-                            </ul>
+                        <h3 style="text-align:center;margin:0.75rem 0 0.5rem;">Vil du have en kort guide?</h3>
+                        <p class="setup-hint" style="text-align:center;margin-bottom:0;">Vi kan fremhæve de vigtigste funktioner trin for trin — tager kun et minut.</p>
+                        <div class="tutorial-choice-grid">
+                            <div class="tutorial-choice-card" @click="finishSetup(false)">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5"/><path d="M12 8v4l3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 3.5A9 9 0 0 1 21 12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                                <h4>Vis mig rundt</h4>
+                                <p>Følg en kort guide der fremhæver de vigtigste funktioner</p>
+                            </div>
+                            <div class="tutorial-choice-card secondary" @click="finishSetup(true)">
+                                <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                                <h4>Begynd selv</h4>
+                                <p>Hop direkte ind i appen</p>
+                            </div>
                         </div>
                     </div>
                     <div class="setup-actions">
                         <button class="setup-prev-btn" @click="prevSetupStep">Tilbage</button>
-                        <button class="setup-finish-btn" @click="finishSetup">Start Planlægning</button>
                     </div>
                 </div>
             </div>
@@ -665,6 +677,62 @@
                     </div>
 
                     <div class="settings-section">
+                        <h2>Medarbejdergruppe</h2>
+                        <div class="settings-grid">
+                            <div class="settings-group">
+                                <label for="employee-label">Betegnelse:</label>
+                                <input
+                                    id="employee-label"
+                                    type="text"
+                                    v-model="settings.employeeLabel"
+                                    placeholder="Medic"
+                                />
+                                <span class="setting-hint">Bruges som label i grænsefladen (f.eks. "Medic", "Plejer", "Vagt")</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2>Vagtnumre</h2>
+                        <div class="settings-grid">
+                            <div
+                                v-for="(name, i) in settings.slotNames"
+                                :key="'slot-name-' + i"
+                                class="settings-group"
+                            >
+                                <label :for="'slot-name-' + i">Vagt {{ i + 1 }} navn:</label>
+                                <input
+                                    :id="'slot-name-' + i"
+                                    type="text"
+                                    v-model="settings.slotNames[i]"
+                                    :placeholder="'Vagt ' + (i + 1)"
+                                />
+                            </div>
+                        </div>
+                        <span class="setting-hint">Tilpas navnene der vises i vagtplan-kortene</span>
+                    </div>
+
+                    <div class="settings-section">
+                        <h2>Dagnavne</h2>
+                        <div class="settings-grid">
+                            <div
+                                v-for="(dayName, i) in settings.customDayNames"
+                                :key="'day-name-' + i"
+                                class="settings-group"
+                            >
+                                <label :for="'day-name-' + i">Dag {{ i + 1 }}:</label>
+                                <input
+                                    :id="'day-name-' + i"
+                                    type="text"
+                                    v-model="settings.customDayNames[i]"
+                                    :placeholder="['Mandag','Tirsdag','Onsdag','Torsdag','Fredag','Lørdag','Søndag'][i]"
+                                />
+                            </div>
+                        </div>
+                        <span class="setting-hint">Tilpas ugedagenes navne</span>
+                    </div>
+
+                    <div class="settings-section">
                         <h2>Om Appen</h2>
                         <div class="settings-about">
                             <p><strong>Vagtplan</strong> v{{ appVersion }}</p>
@@ -678,6 +746,23 @@
                     <button class="settings-save-btn" @click="saveSettings">Gem Indstillinger</button>
                 </div>
             </div>
+
+            <!-- Interactive tutorial overlay -->
+            <template v-if="showTutorial">
+                <div :class="['tutorial-tooltip', { 'tutorial-tooltip-center': !currentTutorialStep.target }]">
+                    <div class="tutorial-tooltip-header">
+                        <span class="tutorial-step-count">{{ tutorialStep + 1 }} / 6</span>
+                        <button class="tutorial-skip-btn" @click="skipTutorial">Spring over</button>
+                    </div>
+                    <h3 class="tutorial-tooltip-title">{{ currentTutorialStep.title }}</h3>
+                    <p class="tutorial-tooltip-body">{{ currentTutorialStep.body }}</p>
+                    <div class="tutorial-tooltip-actions">
+                        <button class="tutorial-next-btn" @click="nextTutorialStep">
+                            {{ tutorialStep < 5 ? 'N\u00E6ste \u2192' : 'Kom i gang!' }}
+                        </button>
+                    </div>
+                </div>
+            </template>
     </div>
 
     <script src="vue.global.prod.js"></script>

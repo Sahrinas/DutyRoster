@@ -69,6 +69,7 @@ createApp({
             weekOffset,
             monthOffset,
             viewMode,
+            effectiveDayNames: settingsApi.effectiveDayNames,
         });
 
         let employeesApi;
@@ -153,6 +154,7 @@ createApp({
             periodLabel: scheduleApi.periodLabel,
             notes,
             dayNames: scheduleApi.dayNames,
+            slotNames: computed(() => settingsApi.settings.value.slotNames),
             todayKey: scheduleApi.todayKey,
             employees,
             assignments,
@@ -218,11 +220,18 @@ createApp({
             await initAfterAuth(key, null);
         }
 
-        // Override nextSetupStep: step 2 triggers password creation
+        // Override nextSetupStep: step 2 triggers password creation, step 3 requires a label
         async function nextSetupStep() {
             if (settingsApi.setupStep.value === 2) {
                 await completePasswordStep();
                 return;
+            }
+            if (settingsApi.setupStep.value === 3) {
+                if (!settingsApi.setupConfig.value.employeeLabel?.trim()) {
+                    showToast('Angiv en betegnelse for din medarbejdergruppe', 'error');
+                    return;
+                }
+                settingsApi.setupConfig.value.employeeLabel = settingsApi.setupConfig.value.employeeLabel.trim();
             }
             settingsApi.nextSetupStep();
         }
@@ -242,15 +251,18 @@ createApp({
 
         if (typeof window !== 'undefined') {
             window.addEventListener('keydown', (event) => {
-                if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
+                const activeTag = document.activeElement?.tagName;
+                const inInput = activeTag === 'INPUT' || activeTag === 'TEXTAREA' || activeTag === 'SELECT';
+
+                if ((event.ctrlKey || event.metaKey) && event.key === 'z' && !inInput) {
                     event.preventDefault();
                     assignmentsApi.undo();
                 }
-                if ((event.ctrlKey || event.metaKey) && event.key === 'y') {
+                if ((event.ctrlKey || event.metaKey) && event.key === 'y' && !inInput) {
                     event.preventDefault();
                     assignmentsApi.redo();
                 }
-                if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'Z') {
+                if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'Z' && !inInput) {
                     event.preventDefault();
                     assignmentsApi.redo();
                 }

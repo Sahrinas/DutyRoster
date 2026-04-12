@@ -7,6 +7,7 @@ export function useExport({
     periodLabel,
     notes,
     dayNames,
+    slotNames,
     todayKey,
     employees,
     assignments,
@@ -20,7 +21,7 @@ export function useExport({
         if (days.length === 0) return;
 
         let csv = 'Dag,Dato';
-        for (let slot = 1; slot <= slotsPerDay.value; slot++) csv += `,Slot ${slot}`;
+        for (let slot = 1; slot <= slotsPerDay.value; slot++) csv += `,${slotNames.value[slot - 1] ?? 'Slot ' + slot}`;
         csv += ',Note\n';
 
         days.forEach((day) => {
@@ -358,14 +359,15 @@ export function useExport({
                 ctx.font = '600 8px Orbitron, sans-serif';
                 ctx.fillStyle = '#4a6a8a';
                 ctx.textAlign = 'left';
-                ctx.fillText('SLOT ' + (slotIndex + 1), x + 14, slotY + 10);
+                const slotLabel = slotNames.value[slotIndex] ?? ('Slot ' + (slotIndex + 1));
+                ctx.fillText(slotLabel.toUpperCase(), x + 14, slotY + 10);
                 slotY += slotLabelH;
 
                 const emp = getAssignedEmployee(dayInfo.dateKey, slotIndex);
                 const slotX = x + 8;
                 const slotW = colWidth - 16;
                 if (emp) {
-                    const color = chipColors[emp.id % 12];
+                    const color = chipColors[emp.color ?? (emp.id % 12)];
                     ctx.fillStyle = color.bg;
                     roundRect(ctx, slotX, slotY, slotW, slotH, 6);
                     ctx.fill();

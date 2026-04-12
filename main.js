@@ -476,9 +476,9 @@ function createSplash() {
 // ===== MAIN WINDOW =====
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 1400,
+        width: 1600,
         height: 900,
-        minWidth: 900,
+        minWidth: 1000,
         minHeight: 600,
         show: false,
         title: 'Vagtplan',
@@ -515,6 +515,7 @@ function createWindow() {
                 splash.close();
                 splash = null;
             }
+            mainWindow.maximize();
             mainWindow.show();
         }, 1800);
     });

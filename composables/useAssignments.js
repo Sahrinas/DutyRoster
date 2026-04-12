@@ -210,7 +210,7 @@ export function useAssignments({
     function autoFill() {
         const active = activeEmployees.value;
         if (active.length === 0) {
-            showToast('Tilf\u00F8j medics f\u00F8rst', 'error');
+            showToast('Tilf\u00F8j ' + (settings.value.employeeLabel || 'medics').toLowerCase() + 's f\u00F8rst', 'error');
             return;
         }
 

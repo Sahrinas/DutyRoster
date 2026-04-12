@@ -47,7 +47,11 @@ export function usePersist({
 
     function applyData(data) {
         if (!data) return;
-        if (data.employees) employees.value = data.employees;
+        if (data.employees) {
+            employees.value = data.employees.map((emp) =>
+                'color' in emp ? emp : { ...emp, color: emp.id % 12 }
+            );
+        }
         if (data.activeDays) activeDays.value = data.activeDays;
         if (data.weekOffset != null) weekOffset.value = data.weekOffset;
         if (data.monthOffset != null) monthOffset.value = data.monthOffset;

@@ -20,16 +20,25 @@ export function useEmployees({
     const editingEmpName = ref('');
     const standbyDragOver = ref(false);
 
-    function colorClass(id) {
-        return 'color-' + (id % 12);
+    function colorClass(emp) {
+        if (!emp) return 'color-0';
+        const c = emp.color ?? (emp.id % 12);
+        return 'color-' + c;
     }
 
     function addEmployee() {
         const name = newEmployeeName.value.trim();
         if (!name) return;
         const id = employees.value.length > 0 ? employees.value.reduce((m, e) => Math.max(m, e.id), -1) + 1 : 0;
-        employees.value.push({ id, name });
+        employees.value.push({ id, name, color: id % 12 });
         newEmployeeName.value = '';
+    }
+
+    function updateEmployeeColor(empId) {
+        const emp = employees.value.find((e) => e.id === empId);
+        if (!emp) return;
+        const current = emp.color ?? (emp.id % 12);
+        emp.color = (current + 1) % 12;
     }
 
     function removeEmployee(id) {
@@ -206,6 +215,7 @@ export function useEmployees({
         activeEmployees,
         filteredEmployees,
         colorClass,
+        updateEmployeeColor,
         addEmployee,
         removeEmployee,
         startRename,

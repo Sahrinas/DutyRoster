@@ -219,7 +219,7 @@ body::after {
 
 /* ===== APP CONTAINER ===== */
 .app-container {
-    max-width: 1400px;
+    max-width: 1920px;
     margin: 0 auto;
     padding: 20px 24px 32px;
     position: relative;
@@ -286,7 +286,7 @@ body::after {
 /* ===== LAYOUT ===== */
 main {
     display: grid;
-    grid-template-columns: 260px 1fr;
+    grid-template-columns: 300px 1fr;
     gap: 20px;
     align-items: start;
 }
@@ -594,6 +594,17 @@ main {
 .chip-action-btn.standby-btn:hover { color: var(--yellow); }
 .chip-action-btn.rename-btn:hover { color: var(--accent); }
 
+.color-dot-btn {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    padding: 0;
+    cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.3);
+    flex-shrink: 0;
+}
+.color-dot-btn:hover { opacity: 1; background: inherit; }
+
 .rename-input {
     background: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--accent);
@@ -764,7 +775,7 @@ main {
 /* ===== ROSTER GRID ===== */
 .roster-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 14px;
 }
 
@@ -838,7 +849,7 @@ main {
 .day-card-compact .slot-label { font-size: 0.55rem; margin-top: 1px; }
 .day-card-compact .slot { padding: 6px 8px; min-height: 32px; font-size: 0.8rem; }
 .day-card-compact .day-notes { padding: 0 8px 6px; }
-.day-card-compact .note-input { padding: 3px 6px; font-size: 0.72rem; }
+.day-card-compact .note-input { padding: 3px 6px; font-size: 0.72rem; min-height: 36px; }
 
 .day-card-header {
     padding: 12px 14px;
@@ -1029,6 +1040,10 @@ main {
     font-size: 0.75rem;
     outline: none;
     transition: all var(--transition);
+    resize: vertical;
+    min-height: 48px;
+    box-sizing: border-box;
+    line-height: 1.4;
 }
 
 .note-input:focus {
@@ -1503,6 +1518,129 @@ main {
     margin-bottom: 0.75rem;
 }
 
+/* === Interactive Tutorial Overlay === */
+.tutorial-overlay {
+    display: none;
+}
+
+.tutorial-target {
+    border-radius: 8px;
+    box-shadow: 0 0 0 4px var(--accent), 0 0 24px 8px rgba(0, 240, 255, 0.35);
+    animation: tutorial-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tutorial-pulse {
+    0%, 100% { box-shadow: 0 0 0 4px var(--accent), 0 0 24px 8px rgba(0, 240, 255, 0.35); }
+    50%       { box-shadow: 0 0 0 6px var(--accent), 0 0 36px 12px rgba(0, 240, 255, 0.55); }
+}
+
+.tutorial-tooltip {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    width: 320px;
+    background: var(--bg-1);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    z-index: 1002;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 240, 255, 0.1);
+}
+
+.tutorial-tooltip-center {
+    bottom: 50%;
+    right: 50%;
+    transform: translate(50%, 50%);
+    width: 380px;
+    text-align: center;
+}
+
+.tutorial-tooltip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.tutorial-step-count {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 0.05em;
+}
+
+.tutorial-skip-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+.tutorial-skip-btn:hover { color: var(--text); background: var(--bg-0); }
+
+.tutorial-tooltip-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 0.5rem 0;
+}
+
+.tutorial-tooltip-body {
+    font-size: 0.9rem;
+    color: var(--text-dim);
+    line-height: 1.6;
+    margin: 0 0 1rem 0;
+}
+
+.tutorial-tooltip-actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.tutorial-tooltip-center .tutorial-tooltip-actions {
+    justify-content: center;
+}
+
+.tutorial-next-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 0.5rem 1.25rem;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: opacity 0.15s;
+}
+.tutorial-next-btn:hover { opacity: 0.85; }
+
+/* Choice cards in wizard step 5 */
+.tutorial-choice-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.tutorial-choice-card {
+    background: var(--bg-0);
+    border: 2px solid var(--accent);
+    border-radius: 10px;
+    padding: 1.5rem 1rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s, background 0.2s;
+}
+.tutorial-choice-card:hover { background: rgba(0, 240, 255, 0.07); }
+.tutorial-choice-card.secondary { border-color: var(--border); }
+.tutorial-choice-card.secondary:hover { border-color: var(--text-dim); }
+.tutorial-choice-card svg { display: block; margin: 0 auto 0.75rem; color: var(--accent); }
+.tutorial-choice-card.secondary svg { color: var(--text-dim); }
+.tutorial-choice-card h4 { margin: 0 0 0.5rem 0; font-size: 1rem; color: var(--text); }
+.tutorial-choice-card p { margin: 0; font-size: 0.85rem; color: var(--text-dim); line-height: 1.5; }
+
 .setup-actions {
     padding: 2rem;
     border-top: 1px solid var(--border);
@@ -1887,20 +2025,20 @@ main {
 .settings-btn {
     margin-left: 8px;
     font-family: 'Inter', sans-serif;
-    color: var(--text-dim);
-    background: transparent;
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid var(--accent);
     border-radius: 999px;
-    padding: 4px 8px;
+    padding: 5px 10px;
     cursor: pointer;
     transition: all var(--transition);
     -webkit-app-region: no-drag;
 }
 
 .settings-btn:hover {
-    color: var(--text);
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
+    color: #000;
+    background: var(--accent);
+    border-color: var(--accent);
 }
 
 /* ===== UPDATE BAR ===== */

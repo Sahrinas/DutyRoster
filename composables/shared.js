@@ -11,7 +11,25 @@ export const defaultSettings = {
     showNotePrompts: true,
     recurrenceHorizonMonths: 12,
     autoUpdate: true,
+    employeeLabel: '',
+    slotNames: ['Vagt 1', 'Vagt 2'],
+    customDayNames: null,
 };
+
+export const TUTORIAL_STEPS = [
+    { target: 'tutorial-employee-input', title: 'Tilf\u00F8j medarbejdere',
+      body: 'Skriv et navn og tryk Enter for at tilf\u00F8je din f\u00F8rste medarbejder til listen.' },
+    { target: 'tutorial-employee-pool', title: 'Medarbejderliste',
+      body: 'Tr\u00E6k en chip herfra over til en vagt-slot for at tildele en vagt.' },
+    { target: 'tutorial-roster', title: 'Vagt-slots',
+      body: 'Hvert kort er en dag. Slip en medarbejder i et slot \u2014 klik cirkelp\u00E6len for faste vagter.' },
+    { target: 'tutorial-toolbar', title: 'V\u00E6rkt\u00F8jslinje',
+      body: 'Auto-fyld fordeler automatisk. Eksporter som billede eller CSV. Fortryd med Ctrl+Z.' },
+    { target: 'tutorial-settings-btn', title: 'Indstillinger',
+      body: '\u00C5bn indstillinger for at \u00E6ndre vagtnumre, dagnavne, udseende og meget mere.' },
+    { target: null, title: 'Du er klar! \uD83C\uDF89',
+      body: 'Du kender nu de vigtigste funktioner. God forn\u00F8jelse med planl\u00E6gningen!' },
+];
 
 export const dayNames = ['Mandag', 'Tirsdag', 'Onsdag', 'Tordag', 'Fredag', 'L\u00F8rdag', 'S\u00F8ndag'];
 export const shortMonthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Maj', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];

@@ -1,7 +1,6 @@
 const { computed } = Vue;
 
 import {
-    dayNames,
     shortMonthNames,
     longMonthNames,
     formatDate,
@@ -10,7 +9,7 @@ import {
     getISOWeek,
 } from './shared.js';
 
-export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
+export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode, effectiveDayNames }) {
     const todayKey = formatDate(new Date());
 
     function getWeekDates(offset) {
@@ -20,7 +19,7 @@ export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
         monday.setDate(now.getDate() + (dow === 0 ? -6 : 1 - dow) + offset * 7);
         monday.setHours(0, 0, 0, 0);
 
-        return dayNames.map((_, i) => {
+        return effectiveDayNames.value.map((_, i) => {
             const d = new Date(monday);
             d.setDate(monday.getDate() + i);
             return d;
@@ -54,14 +53,16 @@ export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
             const now = new Date();
             const target = new Date(now.getFullYear(), now.getMonth() + monthOffset.value, 1);
             const dow = target.getDay();
-            const mondayOfFirst = new Date(target);
-            mondayOfFirst.setDate(target.getDate() - (dow === 0 ? 6 : dow - 1));
+            // Find the first Monday that falls within the target month (not before it)
+            const daysToMonday = dow === 0 ? 1 : dow === 1 ? 0 : 8 - dow;
+            const firstMondayInMonth = new Date(target);
+            firstMondayInMonth.setDate(1 + daysToMonday);
+            firstMondayInMonth.setHours(0, 0, 0, 0);
             const todayMonday = new Date(now);
             const todayDow = now.getDay();
             todayMonday.setDate(now.getDate() - (todayDow === 0 ? 6 : todayDow - 1));
             todayMonday.setHours(0, 0, 0, 0);
-            mondayOfFirst.setHours(0, 0, 0, 0);
-            weekOffset.value = Math.round((mondayOfFirst - todayMonday) / (7 * 86400000));
+            weekOffset.value = Math.round((firstMondayInMonth - todayMonday) / (7 * 86400000));
         }
 
         viewMode.value = mode;
@@ -103,7 +104,7 @@ export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
             const dates = getWeekDates(weekOffset.value);
             return activeDays.value.map((i) => ({
                 index: i,
-                name: dayNames[i],
+                name: effectiveDayNames.value[i],
                 dateKey: formatDate(dates[i]),
                 display: formatDisplay(dates[i]),
                 dayNum: dates[i].getDate(),
@@ -116,7 +117,7 @@ export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
                 const dayIndex = (d.getDay() + 6) % 7;
                 return {
                     index: dayIndex,
-                    name: dayNames[dayIndex],
+                    name: effectiveDayNames.value[dayIndex],
                     dateKey: formatDate(d),
                     display: formatDisplay(d),
                     dayNum: d.getDate(),
@@ -151,7 +152,7 @@ export function useSchedule({ activeDays, weekOffset, monthOffset, viewMode }) {
     }
 
     return {
-        dayNames,
+        dayNames: effectiveDayNames,
         shortMonthNames,
         longMonthNames,
         todayKey,
